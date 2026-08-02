@@ -1,55 +1,52 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { supabase } from './supabase';
 import { TABLES } from './dbService';
+import { callGemini } from './geminiProxy';
 
 /**
  * AgenticService - Simulates AI-Agent and REST API endpoints for Cognitive AP.
+ * All LLM calls go through the `gemini-proxy` Supabase Edge Function so the
+ * real Gemini API key stays a server-side secret.
  */
 
-// --- LLM Configuration ---
-// Placeholder for API Key: Paste your key in .env as VITE_LLM_API_KEY
-const API_KEY = import.meta.env.VITE_LLM_API_KEY || "";
+const routerMockFallback = (safeText: string): 'Invoice' | 'Acknowledgement' | 'Inquiry' => {
+  const lowerText = safeText.toLowerCase();
+  if (lowerText.includes('delay') || lowerText.includes('split') || lowerText.includes('backorder')) {
+    return 'Acknowledgement';
+  }
+  if (lowerText.includes('amount') || lowerText.includes('freight') || lowerText.includes('due')) {
+    return 'Invoice';
+  }
+  return 'Inquiry';
+};
 
 /**
  * Agent 1 (The Router): Analyzes the text and returns an intent string.
  */
 export async function runRouterAgent(text: string): Promise<'Invoice' | 'Acknowledgement' | 'Inquiry'> {
   const safeText = text || "";
-  if (!API_KEY) {
-    const lowerText = safeText.toLowerCase();
-    if (lowerText.includes('delay') || lowerText.includes('split') || lowerText.includes('backorder')) {
-      return 'Acknowledgement';
-    }
-    if (lowerText.includes('amount') || lowerText.includes('freight') || lowerText.includes('due')) {
-      return 'Invoice';
-    }
-    return 'Inquiry';
-  }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const model = "gemini-3-flash-preview";
-
-    const systemInstruction = `You are an Accounts Payable Document Router. 
+    const systemInstruction = `You are an Accounts Payable Document Router.
 Analyze the provided text and classify its intent into EXACTLY one of these categories: "Invoice", "Acknowledgement", or "Inquiry".
 Return ONLY the category name as a string.`;
 
-    const response = await ai.models.generateContent({
-      model: model,
+    const text_ = await callGemini({
+      model: "gemini-3-flash-preview",
       contents: safeText,
       config: {
         systemInstruction: systemInstruction,
       }
     });
 
-    const intent = response.text?.trim() as any;
+    const intent = text_.trim() as any;
     if (['Invoice', 'Acknowledgement', 'Inquiry'].includes(intent)) {
       return intent;
     }
-    return 'Inquiry';
+    return routerMockFallback(safeText);
   } catch (error) {
-    console.error("RouterAgent failed:", error);
-    return 'Inquiry';
+    console.error("RouterAgent failed, falling back to mock:", error);
+    return routerMockFallback(safeText);
   }
 }
 
@@ -62,20 +59,17 @@ export async function runExtractorAgent(text: string, intent: string) {
     return { message: "Extraction skipped: Intent is not Acknowledgement" };
   }
 
-  if (!API_KEY) {
+  const mockFallback = () => {
     const poMatch = safeText.match(/PO-\d+/i);
     return {
       poNumber: poMatch ? poMatch[0].toUpperCase() : null,
       delayStatus: safeText.toLowerCase().includes('delay') ? 'Delayed' : 'Confirmed',
       quantity: safeText.match(/\d+ units/i)?.[0] || null
     };
-  }
+  };
 
   try {
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const model = "gemini-3-flash-preview";
-
-    const systemInstruction = `You are an Accounts Payable Data Extractor. 
+    const systemInstruction = `You are an Accounts Payable Data Extractor.
 The document has been classified as an "Acknowledgement".
 Extract the following entities from the text:
 - PO Number (e.g., PO-1234)
@@ -89,8 +83,8 @@ Return a PURE JSON object matching this schema:
   "quantity": string | null
 }`;
 
-    const response = await ai.models.generateContent({
-      model: model,
+    const responseText = await callGemini({
+      model: "gemini-3-flash-preview",
       contents: safeText,
       config: {
         systemInstruction: systemInstruction,
@@ -107,10 +101,10 @@ Return a PURE JSON object matching this schema:
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return JSON.parse(responseText || "{}");
   } catch (error) {
-    console.error("ExtractorAgent failed:", error);
-    return { error: "Extraction failed" };
+    console.error("ExtractorAgent failed, falling back to mock:", error);
+    return mockFallback();
   }
 }
 
@@ -118,23 +112,17 @@ Return a PURE JSON object matching this schema:
  * Performs multimodal extraction (OCR + CV) from an uploaded document.
  */
 export async function performMultimodalExtraction(base64Data: string, mimeType: string) {
-  if (!API_KEY) {
-    console.warn("AgenticService: No VITE_LLM_API_KEY found. Returning mock multimodal result.");
-    return {
-      vendorName: "Mock Vendor Inc.",
-      totalAmount: 1250.50,
-      poNumber: "PO-9999"
-    };
-  }
+  const mockFallback = () => ({
+    vendorName: "Mock Vendor Inc.",
+    totalAmount: 1250.50,
+    poNumber: "PO-9999"
+  });
 
   try {
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const model = "gemini-3-flash-preview";
-
     const systemInstruction = "You are an OCR and CV agent. Read this uploaded document. Extract the Vendor Name, Total Amount, and PO Number, and return it strictly as a JSON object.";
 
-    const response = await ai.models.generateContent({
-      model: model,
+    const responseText = await callGemini({
+      model: "gemini-3-flash-preview",
       contents: [
         {
           inlineData: {
@@ -161,10 +149,10 @@ export async function performMultimodalExtraction(base64Data: string, mimeType: 
       }
     });
 
-    return JSON.parse(response.text || "{}");
+    return JSON.parse(responseText || "{}");
   } catch (error) {
-    console.error("Multimodal extraction failed:", error);
-    throw error;
+    console.error("Multimodal extraction failed, falling back to mock:", error);
+    return mockFallback();
   }
 }
 
@@ -219,16 +207,8 @@ export async function classifyDocumentIntent(textPayload: string) {
     };
   };
 
-  if (!API_KEY) {
-    console.warn("AgenticService: No VITE_LLM_API_KEY found. Falling back to mock logic.");
-    return mockFallback(textPayload);
-  }
-
   try {
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const model = "gemini-3-flash-preview";
-
-    const systemInstruction = `You are an Accounts Payable Document Classifier. 
+    const systemInstruction = `You are an Accounts Payable Document Classifier.
 Analyze the provided text payload from a vendor and classify its intent.
 Return a PURE JSON object exactly matching this schema:
 {
@@ -239,8 +219,8 @@ Return a PURE JSON object exactly matching this schema:
 }
 Do not include any markdown formatting or extra text.`;
 
-    const response = await ai.models.generateContent({
-      model: model,
+    const responseText = await callGemini({
+      model: "gemini-3-flash-preview",
       contents: textPayload,
       config: {
         systemInstruction: systemInstruction,
@@ -258,10 +238,9 @@ Do not include any markdown formatting or extra text.`;
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
-    return result;
+    return JSON.parse(responseText || "{}");
   } catch (error) {
-    console.error("AgenticService: LLM API call failed:", error);
+    console.error("AgenticService: LLM API call failed, falling back to mock:", error);
     return mockFallback(textPayload);
   }
 }
