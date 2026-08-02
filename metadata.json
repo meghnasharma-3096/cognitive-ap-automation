@@ -1,0 +1,5 @@
+{
+  "name": "Cognitive AP - Document Automation Hub",
+  "description": "Real-time document ingestion, AI categorization, and straight-through processing dashboard.",
+  "requestFramePermissions": []
+}
