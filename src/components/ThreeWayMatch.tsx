@@ -154,7 +154,7 @@ export const ThreeWayMatch = () => {
     const toastId = toast.loading(`Approving Invoice ${selectedMatch.invoice_number}...`);
     try {
       const docs = await getAllData(TABLES.ingestedDocuments);
-      const doc = docs.find(d => d.invoiceNumber === selectedMatch.invoice_number);
+      const doc = docs.find(d => d.invoice_number === selectedMatch.invoice_number);
       
       if (doc) {
         const previousStatus = doc.status;

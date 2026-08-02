@@ -762,20 +762,6 @@ export default function App() {
         const vendor_name = file.name.replace(/\.[^/.]+$/, "");
         const confidence_score = 98;
 
-        // Supabase Insert for Ingested Document (STRICT SCHEMA)
-        try {
-          await supabase.from(TABLES.ingestedDocuments).insert([{
-            document_name: file.name,
-            vendor_name: vendor_name,
-            intent: intent,
-            status: 'Pending',
-            confidence_score: confidence_score,
-            ingestion_date: new Date().toISOString()
-          }]);
-        } catch (dbErr) {
-          console.error('Failed to log ingestion to Supabase:', dbErr);
-        }
-
         const newDoc: Document = {
             id: intent === 'Invoice' ? `INV-${Math.floor(Math.random() * 1000000)}` :
                 intent === 'Acknowledgement' ? `ACK-${Math.floor(Math.random() * 100000)}` :
@@ -787,6 +773,21 @@ export default function App() {
             status: intent === 'Invoice' ? 'Auto-posted' : 'Matched',
             timestamp: new Date().toISOString()
           };
+
+        // Supabase Insert for Ingested Document (STRICT SCHEMA)
+        try {
+          await supabase.from(TABLES.ingestedDocuments).insert([{
+            document_name: file.name,
+            vendor_name: vendor_name,
+            intent: intent,
+            status: 'Pending',
+            confidence_score: confidence_score,
+            ingestion_date: new Date().toISOString(),
+            invoice_number: intent === 'Invoice' ? newDoc.id : null
+          }]);
+        } catch (dbErr) {
+          console.error('Failed to log ingestion to Supabase:', dbErr);
+        }
 
         if (intent === 'Invoice') {
           const billedQty = extracted.items[0]?.quantity || 0;
