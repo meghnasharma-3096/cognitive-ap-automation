@@ -130,8 +130,21 @@ export class JsonStore {
 
   private flush() {
     const tmp = `${this.dbPath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.tables, null, 2));
-    fs.renameSync(tmp, this.dbPath);
+    const json = JSON.stringify(this.tables, null, 2);
+    fs.writeFileSync(tmp, json);
+    // Windows: antivirus / indexers can briefly lock the target, making rename fail with EPERM/EBUSY/EACCES.
+    // Retry for a moment; as a last resort write in place (still correct, just not atomic).
+    for (let attempt = 0; attempt < 12; attempt++) {
+      try {
+        fs.renameSync(tmp, this.dbPath);
+        return;
+      } catch (e: any) {
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes(e?.code)) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (attempt + 1));
+      }
+    }
+    fs.writeFileSync(this.dbPath, json);
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
   }
 
   /** Restore the golden seed. Returns row counts per table. */

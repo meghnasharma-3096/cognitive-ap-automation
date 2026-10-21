@@ -150,6 +150,22 @@ describe('query patterns used by the app', () => {
 });
 
 describe('robustness', () => {
+  it('survives Windows-style transient EPERM on rename (retries, then still saves)', () => {
+    const real = fs.renameSync;
+    let n = 0;
+    (fs as any).renameSync = (a: any, b: any) => {
+      if (n++ < 3) { const e: any = new Error('EPERM'); e.code = 'EPERM'; throw e; }
+      return real(a, b);
+    };
+    try {
+      const st = new JsonStore(path.join(tmp, 'eperm.json'), path.join(__dirname, '..', 'data', 'seed.json'));
+      st.reset();
+      expect(n).toBeGreaterThan(3);
+      expect(new JsonStore(path.join(tmp, 'eperm.json'), path.join(__dirname, '..', 'data', 'seed.json')).counts().vendorinvoices).toBe(15);
+    } finally { (fs as any).renameSync = real; }
+  });
+
+
   it('concurrent inserts never lose rows', async () => {
     await Promise.all(Array.from({ length: 40 }, (_, i) => supabase.from('auditlogs').insert({ action_type: `A${i}` })));
     expect((await supabase.from('auditlogs').select('*')).data).toHaveLength(40);
