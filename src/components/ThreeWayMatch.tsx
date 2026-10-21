@@ -573,25 +573,45 @@ export const ThreeWayMatch = () => {
               </div>
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Patterns</h4>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Freight Variance Auto-Approvals</span>
-                  <span className="text-white font-bold">28% of total</span>
-                </div>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-accent w-[28%]" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Unit Price Matching Accuracy</span>
-                  <span className="text-white font-bold">92.4%</span>
-                </div>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-success w-[92.4%]" />
-                </div>
-              </div>
+            <div className="space-y-4" data-testid="resolution-patterns">
+              {(() => {
+                const analysed = matches.filter(m => m.status !== 'Pending');
+                const matched = analysed.filter(m => m.status === 'Matched').length;
+                const exceptions = analysed.filter(m => m.status === 'Variance');
+                const LABEL: Record<string, string> = {
+                  DUPLICATE: 'Duplicate invoice', FREIGHT: 'Unapproved freight', PRICE: 'Price variance', QTY_VS_RECEIPT: 'Billed > received',
+                  QTY_VS_PO: 'Billed > ordered', VENDOR_MISMATCH: 'Vendor mismatch', PO_MISSING: 'PO not found', RECEIPT_MISSING: 'No goods receipt', TOTAL_MISSING: 'Total missing',
+                };
+                const byCause: Record<string, number> = {};
+                exceptions.forEach(m => { const c = LABEL[m.raw?.match_code] ?? 'Other'; byCause[c] = (byCause[c] || 0) + 1; });
+                const rows = Object.entries(byCause).sort((a, b) => b[1] - a[1]);
+                if (analysed.length === 0) return <p className="text-xs text-slate-500">Run the analysis to see how invoices resolve.</p>;
+                const pct = Math.round((matched / analysed.length) * 1000) / 10;
+                return (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">Auto-match rate</span>
+                        <span className="text-white font-bold">{pct}% ({matched} of {analysed.length})</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-success" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    {rows.map(([label, n]) => (
+                      <div key={label} className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">{label}</span>
+                          <span className="text-white font-bold">{n} of {exceptions.length} exceptions</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-brand-danger" style={{ width: `${(n / exceptions.length) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
