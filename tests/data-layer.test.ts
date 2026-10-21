@@ -42,7 +42,7 @@ describe('seed + reset', () => {
     const h = await (await fetch('/api/health')).json();
     expect(h.counts).toMatchObject({
       purchaseorders: 17, warehousereceipts: 17, vendorinvoices: 15,
-      documentclusters: 3, ingesteddocuments: 7,
+      documentclusters: 0, ingesteddocuments: 7,
     });
   });
 
@@ -91,9 +91,9 @@ describe('query patterns used by the app', () => {
   });
 
   it(".delete().not('id','is',null) clears a table", async () => {
-    const r = await supabase.from('documentclusters').delete().not('id', 'is', null);
+    const r = await supabase.from('warehousereceipts').delete().not('id', 'is', null);
     expect(r.error).toBeNull();
-    expect((await supabase.from('documentclusters').select('*')).data).toHaveLength(0);
+    expect((await supabase.from('warehousereceipts').select('*')).data).toHaveLength(0);
   });
 
   it('insert().select().single() returns the created row with generated id', async () => {

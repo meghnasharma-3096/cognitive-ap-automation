@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { JsonStore } from './store';
 import type { Query } from './store';
 import { approveInvoice, runMatch } from './matchService';
+import { buildClusters, resolveCluster } from './clusters';
 import { ingestDocument } from './ingest';
 import type { IngestSource } from './ingest';
 import { RulesProvider } from './extraction/providers';
@@ -54,6 +55,16 @@ export function createApp({ store, provider = new RulesProvider(), providerReaso
   app.post('/api/match/approve', async (req, res) => {
     const { invoiceId } = req.body ?? {};
     const r = await approveInvoice(store, String(invoiceId ?? ''), 'user');
+    res.status(r.ok ? 200 : 404).json({ data: r, error: r.ok ? null : { message: r.message, code: 'NOT_FOUND', details: '', hint: '' } });
+  });
+
+  // Intelligence clusters: computed from live match results, never seeded.
+  app.get('/api/clusters', async (_req, res) => {
+    res.json({ data: await store.transact(t => buildClusters(t)), error: null });
+  });
+  app.post('/api/clusters/:id/resolve', async (req, res) => {
+    const action = req.body?.action === 'reject' ? 'reject' : 'approve';
+    const r = await store.transact(t => resolveCluster(t, req.params.id, action, 'user'));
     res.status(r.ok ? 200 : 404).json({ data: r, error: r.ok ? null : { message: r.message, code: 'NOT_FOUND', details: '', hint: '' } });
   });
 

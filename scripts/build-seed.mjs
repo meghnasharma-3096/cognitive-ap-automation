@@ -98,35 +98,7 @@ const vendorinvoices = purchaseorders.slice(0, 15).map((po, i) => {
   };
 });
 
-const documentclusters = [
-  {
-    id: 'cl-1',
-    cluster_name: 'Duplicate Invoices - Q1',
-    category: 'Compliance',
-    total_impact_amount: 12500.5,
-    document_count: 24,
-    status: 'Requires Review',
-    description: 'Potential duplicate billing detected across multiple vendor portals.',
-  },
-  {
-    id: 'cl-2',
-    cluster_name: 'Price Variance - Logistics',
-    category: 'Pricing',
-    total_impact_amount: 8420,
-    document_count: 15,
-    status: 'Requires Review',
-    description: 'Consistent 5% surcharge discrepancy from Starlight Logistics.',
-  },
-  {
-    id: 'cl-3',
-    cluster_name: 'Tax ID Mismatch',
-    category: 'Regulatory',
-    total_impact_amount: 0,
-    document_count: 8,
-    status: 'Requires Review',
-    description: 'Vendor Tax IDs do not match ERP master data records.',
-  },
-];
+const documentclusters = []; // computed live from match results (server/clusters.ts)
 
 // Historical ingestion feed shown on Overview (previously hardcoded in App.tsx and
 // silently inserted on first load, twice under React StrictMode).

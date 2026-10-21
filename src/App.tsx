@@ -44,6 +44,7 @@ import { Modal } from './components/Modal';
 import { supabase } from './services/supabase';
 import { runMatchApi } from './services/matchApi';
 import { populateDummyData, addData, getAllData, updateDocumentStatus, TABLES } from './services/dbService';
+import { getClusters } from './services/clusterApi';
 import { IngestPanel } from './components/IngestPanel';
 import { resetDatabase } from './services/supabase';
 import { downloadCSV, fileToBase64 } from './utils/helpers';
@@ -685,10 +686,8 @@ export default function App() {
   const refreshMetrics = async () => {
     await fetchDocs();
     try {
-      const clusters = await getAllData(TABLES.documentClusters);
-      const pendingCount = clusters
-        .filter(c => c.status === 'Requires Review')
-        .reduce((sum, c) => sum + (c.document_count || 0), 0);
+      const clusters = await getClusters();
+      const pendingCount = clusters.reduce((sum, c) => sum + (c.document_count || 0), 0);
       setClusterPendingDocs(pendingCount);
     } catch (err) {
       console.error('Failed to fetch clusters for metrics:', err);

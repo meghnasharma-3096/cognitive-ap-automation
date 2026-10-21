@@ -12,3 +12,4 @@ coverage/
 data/db.json
 data/db.json.tmp
 data/inbox/
+.vitest/
