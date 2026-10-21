@@ -58,6 +58,7 @@ export class GeminiProvider implements Provider {
               responseMimeType: 'application/json',
               responseSchema: RESPONSE_SCHEMA as any,
               temperature: 0,
+              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 60000) },
             },
           });
           const text = res.text ?? '';

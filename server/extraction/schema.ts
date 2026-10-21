@@ -126,6 +126,8 @@ EXTRACT, grounded strictly in the document:
 - invoice_number: the vendor's invoice identifier exactly as written (keep prefixes like INV-).
 - po_number: the purchase order the invoice/acknowledgement refers to, normalised as "PO-<digits/code>" (e.g. "PO 4017" -> "PO-4017").
   If several POs are mentioned, put the main one in po_number and the rest in other_po_numbers.
+  If the Subject line and the message body name DIFFERENT POs, the body wins (subjects are often stale or copy-pasted):
+  use the body's PO in po_number, list the Subject's PO in other_po_numbers, and lower your confidence a little.
 - vendor_name: the company that issued the document (letterhead, signature, or sender). Not the recipient.
 - sender_email: the sender's email address if shown.
 - total_amount: the total the vendor is asking to be paid (grand total / amount due), INCLUDING freight and tax.

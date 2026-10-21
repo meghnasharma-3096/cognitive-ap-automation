@@ -46,6 +46,7 @@ async function main() {
     if (exp.match && r.match?.status !== exp.match) problems.push(`match ${r.match?.status ?? 'none'} != ${exp.match}`);
     if (exp.code && r.match?.code !== exp.code) problems.push(`code ${r.match?.code} != ${exp.code}`);
     if (exp.type === 'acknowledgement' && e?.acknowledgement?.status !== exp.ack_status) problems.push(`ack ${e?.acknowledgement?.status} != ${exp.ack_status}`);
+    if (r.provider !== 'gemini') problems.push(`NOT READ BY GEMINI (${r.provider}): ${r.warnings.find(w => /LLM call failed/.test(w)) ?? r.error ?? ''}`);
     if (problems.length) bad++;
     console.log(`${problems.length ? 'FAIL' : 'ok  '} ${f.padEnd(26)} ${String(Date.now() - t0).padStart(5)}ms  conf ${r.confidence}%  ${problems.join('; ')}`);
   }
