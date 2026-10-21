@@ -90,6 +90,7 @@ export async function prepareDocument(doc: RawDocument): Promise<PreparedDocumen
   if (IMAGE_MIME.test(mime)) {
     notes.push('Image input: values cannot be verified against a text layer');
     const img = await normalizeImage(buf, mime);
+    if (img.note) notes.push(img.note);
     return {
       input: { filename: doc.filename, text: '', attachments: [{ mimeType: img.mimeType, dataBase64: img.dataBase64, filename: doc.filename }] },
       sourceText: '', kind: 'image', notes,
