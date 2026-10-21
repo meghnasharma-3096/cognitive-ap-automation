@@ -43,3 +43,15 @@ Duplicate invoice (same invoice number alone) · PO missing · receipt missing �
 ## Layout
 
 `server/` Express API + JSON store + match engine + extraction · `src/` React UI · `tests/corpus/` sample documents + ground truth · `data/seed.json` golden data.
+
+## Hosting a public demo (free)
+
+The app needs a Node host (GitHub Pages cannot run the API). A `Dockerfile` and `render.yaml` are included:
+
+1. Push the branch to GitHub. On https://render.com choose **New > Blueprint** and pick this repo.
+2. It builds and starts in **replay mode** (`LLM_PROVIDER=fixture`): the 11 sample documents are read from recorded answers, so no key is needed.
+3. To read arbitrary documents live, delete `LLM_PROVIDER` in the service settings and add `GEMINI_API_KEY`.
+
+Locally: `npm run build && NODE_ENV=production npm start`.
+
+Notes: the free tier sleeps after idle time (first load is slow), and data resets whenever the service restarts. Anyone with the link can use the app and press Reset, so do not put real data or a paid key on a public URL.

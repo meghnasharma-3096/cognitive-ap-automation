@@ -6,7 +6,7 @@ import 'dotenv/config';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer as createVite } from 'vite';
+import express from 'express';
 import { createApp } from './app';
 import { JsonStore } from './store';
 import { chooseProvider } from './extraction/providers';
@@ -22,12 +22,16 @@ const choice = chooseProvider(process.env);
 const app = createApp({ store, provider: choice.provider, providerReason: choice.reason });
 const server = http.createServer(app);
 
-const vite = await createVite({
-  root,
-  appType: 'spa',
-  server: { middlewareMode: true, hmr: { server } },
-});
-app.use(vite.middlewares);
+if (process.env.NODE_ENV === 'production') {
+  // Hosted mode: serve the pre-built UI (npm run build), no Vite.
+  const dist = path.join(root, 'dist');
+  app.use(express.static(dist));
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+} else {
+  const { createServer: createVite } = await import('vite');
+  const vite = await createVite({ root, appType: 'spa', server: { middlewareMode: true, hmr: { server } } });
+  app.use(vite.middlewares);
+}
 
 const port = Number(process.env.PORT ?? 3000);
 server.listen(port, '0.0.0.0', () => {
