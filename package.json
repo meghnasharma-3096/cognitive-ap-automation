@@ -12,7 +12,8 @@
     "test": "vitest run",
     "clean": "rm -rf dist",
     "eval:live": "tsx scripts/eval-live.ts",
-    "corpus": "python3 scripts/build-corpus.py"
+    "corpus": "python3 scripts/build-corpus.py",
+    "llm:models": "tsx scripts/list-models.ts"
   },
   "dependencies": {
     "@google/genai": "^1.44.0",

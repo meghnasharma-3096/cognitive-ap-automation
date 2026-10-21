@@ -36,7 +36,7 @@ export class GeminiProvider implements Provider {
   private ai: GoogleGenAI;
   private models: string[];
 
-  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3-flash-preview,gemini-2.5-flash')) {
+  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3-flash-preview,gemini-3.8-flash')) {
     this.ai = new GoogleGenAI({ apiKey });
     this.models = models.split(',').map(m => m.trim()).filter(Boolean);
   }
@@ -46,9 +46,9 @@ export class GeminiProvider implements Provider {
       { text: `Source file name: ${input.filename}\n\n${input.text ? `Document text / email:\n${input.text}` : '(No text layer: read the attached file.)'}` },
       ...input.attachments.map(a => ({ inlineData: { mimeType: a.mimeType, data: a.dataBase64 } })),
     ];
-    let lastErr: unknown;
+    const errs: string[] = [];
     for (const model of this.models) {
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const res = await this.ai.models.generateContent({
             model,
@@ -58,21 +58,24 @@ export class GeminiProvider implements Provider {
               responseMimeType: 'application/json',
               responseSchema: RESPONSE_SCHEMA as any,
               temperature: 0,
-              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 60000) },
+              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 45000) },
             },
           });
-          const text = res.text ?? '';
-          return { raw: JSON.parse(text), model };
+          return { raw: JSON.parse(res.text ?? ''), model };
         } catch (e: any) {
-          lastErr = e;
-          const msg = String(e?.message ?? e);
-          // Model unavailable -> try the next configured model; transient/JSON -> retry once.
-          if (/not found|404|unsupported|not supported|deprecated/i.test(msg)) break;
-          if (/api key|permission|401|403/i.test(msg)) throw e;
+          const msg = String(e?.message ?? e).replace(/\s+/g, ' ');
+          if (/api key|permission|401|403|PERMISSION_DENIED|UNAUTHENTICATED/i.test(msg) && !/not found/i.test(msg)) throw e;
+          // Overloaded / rate limited: wait and retry the same model.
+          if (attempt < 3 && /429|503|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          errs.push(`${model}: ${msg.slice(0, 180)}`);
+          break; // timeout, 404, or out of retries -> next model
         }
       }
     }
-    throw lastErr ?? new Error('Gemini returned no result');
+    throw new Error(errs.join(' | ') || 'Gemini returned no result');
   }
 }
 
