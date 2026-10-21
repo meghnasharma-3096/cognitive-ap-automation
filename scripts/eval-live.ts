@@ -22,12 +22,16 @@ const record = process.argv.includes('--record');
 let provider: any = new GeminiProvider(key);
 if (record) provider = new RecordingProvider(provider, corpus);
 
-const files = fs.readdirSync(corpus).filter(f => !f.endsWith('.expected.json') && !f.endsWith('.llm.json')).sort();
+const only = process.argv.slice(2).filter(a => !a.startsWith('--'));   // e.g. npm run eval:live -- paragraph scanned
+const files = fs.readdirSync(corpus).filter(f => !f.endsWith('.expected.json') && !f.endsWith('.llm.json'))
+  .filter(f => !only.length || only.some(o => f.toLowerCase().includes(o.toLowerCase()))).sort();
+const delayMs = Number(process.env.EVAL_DELAY_MS ?? 4000);   // stay under free-tier requests-per-minute limits
 let bad = 0;
 
 async function main() {
   console.log(`Model(s): ${process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest,gemini-3.1-pro-preview'}${record ? '   (recording fixtures)' : ''}\n`);
   for (const f of files) {
+    if (f !== files[0]) await new Promise(r => setTimeout(r, delayMs));
     const exp = JSON.parse(fs.readFileSync(path.join(corpus, f + '.expected.json'), 'utf8'));
     const store = new JsonStore(path.join(os.tmpdir(), `eval-${process.pid}-${Math.random()}.json`), path.join(root, 'data', 'seed.json'));
     store.reset();

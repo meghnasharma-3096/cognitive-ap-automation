@@ -74,7 +74,7 @@ export class GeminiProvider implements Provider {
           if (/api key|permission|401|403|PERMISSION_DENIED|UNAUTHENTICATED/i.test(msg) && !/not found/i.test(msg)) throw e;
           // Overloaded / rate limited: wait and retry the same model.
           if (attempt < 3 && /429|503|504|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
-            await new Promise(r => setTimeout(r, 1500 * attempt));
+            await new Promise(r => setTimeout(r, (/429|RESOURCE_EXHAUSTED/i.test(msg) ? 8000 : 1500) * attempt));
             continue;
           }
           errs.push(`${model}: ${msg.slice(0, 180)}`);
