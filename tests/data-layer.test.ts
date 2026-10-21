@@ -42,7 +42,7 @@ describe('seed + reset', () => {
     const h = await (await fetch('/api/health')).json();
     expect(h.counts).toMatchObject({
       purchaseorders: 17, warehousereceipts: 17, vendorinvoices: 15,
-      documentclusters: 3, ingesteddocuments: 0,
+      documentclusters: 3, ingesteddocuments: 7,
     });
   });
 

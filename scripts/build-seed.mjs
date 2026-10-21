@@ -128,11 +128,26 @@ const documentclusters = [
   },
 ];
 
+// Historical ingestion feed shown on Overview (previously hardcoded in App.tsx and
+// silently inserted on first load, twice under React StrictMode).
+const ingesteddocuments = [
+  ['INV-902341', 'Starlight Logistics', 'Invoice', 99.2, 'Auto-posted', '2026-03-12T08:20:00.000Z'],
+  ['ACK-77281', 'AWS Enterprise', 'Acknowledgement', 97.8, 'Matched', '2026-03-12T08:17:00.000Z'],
+  ['INQ-00129', 'Unknown Sender', 'Inquiry', 62.1, 'Needs Review', '2026-03-12T08:10:00.000Z'],
+  ['INV-902342', 'Global Tech Corp', 'Invoice', 98.5, 'Auto-posted', '2026-03-12T08:07:00.000Z'],
+  ['ACK-77282', 'Logistics Plus Inc', 'Acknowledgement', 94.2, 'Matched', '2026-03-12T08:04:00.000Z'],
+  ['INV-902343', 'Apex Manufacturing', 'Invoice', 89.4, 'Needs Review', '2026-03-11T08:00:00.000Z'],
+  ['INV-902344', 'Starlight Logistics', 'Invoice', 99.1, 'Auto-posted', '2026-03-10T08:00:00.000Z'],
+].map(([id, vendor_name, intent, confidence_score, status, ingestion_date]) => ({
+  id, document_name: `${id}.pdf`, vendor_name, intent, confidence_score, status, ingestion_date,
+  invoice_number: intent === 'Invoice' ? id : null, source: 'seed',
+}));
+
 const seed = {
   purchaseorders,
   warehousereceipts,
   vendorinvoices,
-  ingesteddocuments: [],
+  ingesteddocuments,
   documentclusters,
   auditlogs: [],
   successreports: [],

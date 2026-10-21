@@ -42,9 +42,10 @@ import { ReportingModule } from './components/ReportingModule';
 import { IntelligenceModule } from './components/IntelligenceModule';
 import { Modal } from './components/Modal';
 import { supabase } from './services/supabase';
+import { runMatchApi } from './services/matchApi';
 import { populateDummyData, addData, getAllData, updateDocumentStatus, TABLES } from './services/dbService';
 import { extractDocumentData } from './services/geminiService';
-import { executeThreeWayMatch, classifyDocumentIntent, fetchVendorInvoice, fetchPoByVendor, processDocumentPipeline, performMultimodalExtraction } from './services/AgenticService';
+import { classifyDocumentIntent, fetchVendorInvoice, fetchPoByVendor, processDocumentPipeline, performMultimodalExtraction } from './services/AgenticService';
 import { downloadCSV, fileToBase64 } from './utils/helpers';
 
 // --- Types ---
@@ -62,18 +63,6 @@ interface Document {
   status: Status;
   timestamp: string;
 }
-
-// --- Mock Data ---
-
-const INITIAL_DOCS: Document[] = [
-  { id: 'INV-902341', vendor_name: 'Starlight Logistics', document_name: 'INV-902341.pdf', intent: 'Invoice', confidence_score: 99.2, status: 'Auto-posted', timestamp: new Date('2026-03-12T08:20:00Z').toISOString() },
-  { id: 'ACK-77281', vendor_name: 'AWS Enterprise', document_name: 'ACK-77281.pdf', intent: 'Acknowledgement', confidence_score: 97.8, status: 'Matched', timestamp: new Date('2026-03-12T08:17:00Z').toISOString() },
-  { id: 'INQ-00129', vendor_name: 'Unknown Sender', document_name: 'INQ-00129.pdf', intent: 'Inquiry', confidence_score: 62.1, status: 'Needs Review', timestamp: new Date('2026-03-12T08:10:00Z').toISOString() },
-  { id: 'INV-902342', vendor_name: 'Global Tech Corp', document_name: 'INV-902342.pdf', intent: 'Invoice', confidence_score: 98.5, status: 'Auto-posted', timestamp: new Date('2026-03-12T08:07:00Z').toISOString() },
-  { id: 'ACK-77282', vendor_name: 'Logistics Plus Inc', document_name: 'ACK-77282.pdf', intent: 'Acknowledgement', confidence_score: 94.2, status: 'Matched', timestamp: new Date('2026-03-12T08:04:00Z').toISOString() },
-  { id: 'INV-902343', vendor_name: 'Apex Manufacturing', document_name: 'INV-902343.pdf', intent: 'Invoice', confidence_score: 89.4, status: 'Needs Review', timestamp: new Date('2026-03-11T08:00:00Z').toISOString() },
-  { id: 'INV-902344', vendor_name: 'Starlight Logistics', document_name: 'INV-902344.pdf', intent: 'Invoice', confidence_score: 99.1, status: 'Auto-posted', timestamp: new Date('2026-03-10T08:00:00Z').toISOString() },
-];
 
 // --- Utilities ---
 
@@ -158,12 +147,12 @@ const Sidebar = ({ active, setActive }: { active: View, setActive: (v: View) => 
             <div className="w-2 h-2 bg-brand-success rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            AI Matching Engine processing 142 new invoices.
+            Match engine ready. Data is stored locally.
           </p>
           <div className="mt-3 h-1 bg-slate-800 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
-              animate={{ width: '65%' }}
+              animate={{ width: '100%' }}
               className="h-full bg-brand-accent"
             />
           </div>
@@ -681,19 +670,14 @@ export default function App() {
   const fetchDocs = async () => {
     try {
       const ingested = await getAllData(TABLES.ingestedDocuments);
-      if (ingested.length === 0) {
-        // Seed with initial docs if empty (DB generates its own uuid ids)
-        for (const doc of INITIAL_DOCS) {
-          const { id, timestamp, ...docData } = doc;
-          await addData(TABLES.ingestedDocuments, { ...docData, ingestion_date: timestamp });
-        }
-        setDocs(INITIAL_DOCS);
-      } else {
-        setDocs([...ingested].reverse().map(d => ({ ...d, timestamp: d.ingestion_date })));
-      }
+      setDocs(
+        [...ingested]
+          .sort((x, y) => String(y.ingestion_date).localeCompare(String(x.ingestion_date)))
+          .map(d => ({ ...d, timestamp: d.ingestion_date }))
+      );
     } catch (err) {
-      console.error('Failed to fetch docs from Supabase:', err);
-      toast.error('Failed to connect to database');
+      console.error('Failed to fetch documents:', err);
+      toast.error('Failed to load documents');
     }
   };
 
@@ -814,75 +798,18 @@ export default function App() {
   };
 
   const runBatchProcessing = async () => {
-    const toastId = toast.loading('Batch Processing: Starting AI Matching Loop...');
-    
+    const toastId = toast.loading('Batch Processing: running three-way match...');
     try {
-      // Step A: Query pending invoices
-      const { data: pendingInvoices, error: fetchError } = await supabase
-        .from(TABLES.vendorInvoices)
-        .select('*')
-        .in('match_status', ['Pending', null]);
-
-      if (fetchError) throw fetchError;
-
-      if (!pendingInvoices || pendingInvoices.length === 0) {
+      const result = await runMatchApi();
+      if (result.processed === 0) {
         toast.info('No pending invoices found for processing.', { id: toastId });
         return;
       }
-
-      let successCount = 0;
-      let exceptionCount = 0;
-
-      // Step B: Loop sequentially
-      for (const invoice of pendingInvoices) {
-        // Step C: Execute 3-way match
-        const result = await executeThreeWayMatch({
-          invoice_number: invoice.invoice_number,
-          po_number: invoice.po_number,
-          billed_quantity: invoice.billed_quantity || 0,
-          freight_amount: invoice.freight_amount || 0
-        });
-
-        if (result.success) {
-          // Step D: Perfect Match
-          await supabase.from(TABLES.successReports).insert([{
-            invoice_number: invoice.invoice_number,
-            amount: invoice.total_amount || 0,
-            status: 'Processed',
-            date: new Date().toISOString()
-          }]);
-
-          await supabase.from(TABLES.vendorInvoices)
-            .update({ match_status: 'Success' })
-            .eq('invoice_number', invoice.invoice_number);
-
-          successCount++;
-        } else {
-          // Step E: Exception
-          const po = await fetchPoByVendor(invoice.po_number);
-          await supabase.from(TABLES.exceptionReports).insert([{
-            invoice_number: invoice.invoice_number,
-            po_number: invoice.po_number,
-            billed_amount: invoice.total_amount || 0,
-            vendor: po?.vendor_name || 'Unknown',
-            notes: result.reason,
-            date: new Date().toISOString()
-          }]);
-
-          await supabase.from(TABLES.vendorInvoices)
-            .update({ match_status: 'Exception' })
-            .eq('invoice_number', invoice.invoice_number);
-
-          exceptionCount++;
-        }
-      }
-
-      toast.success(`Batch Processing Complete`, { 
+      toast.success('Batch Processing Complete', {
         id: toastId,
-        description: `Processed ${pendingInvoices.length} invoices. Success: ${successCount}, Exceptions: ${exceptionCount}`,
+        description: `Processed ${result.processed} invoices. Success: ${result.success}, Exceptions: ${result.exceptions}`,
         duration: 5000
       });
-      
       await refreshMetrics();
     } catch (err) {
       console.error(err);
@@ -1200,46 +1127,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Summary Stats for Acknowledgements */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl">
-                    <AlertTriangle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unresolved</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">42 Lines</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-warning/10 text-brand-warning rounded-xl">
-                    <Clock size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Alerts</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">12 Items</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl">
-                    <AlertCircle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Backordered</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">8 POs</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl">
-                    <CheckCircle2 size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Matched Today</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">184 Lines</h4>
-                  </div>
-                </div>
-              </div>
-
               <ReconciliationTable />
             </motion.div>
           )}
@@ -1253,7 +1140,7 @@ export default function App() {
               <div className="flex items-end justify-between">
                 <div>
                   <h1 className="text-4xl font-bold text-white tracking-tight mb-2">3-Way Match Overview</h1>
-                  <p className="text-slate-400">Reconciling Purchase Orders, Receipts, and Invoices for Q4 Operations.</p>
+                  <p className="text-slate-400">Reconciling purchase orders, goods receipts and vendor invoices.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
@@ -1265,40 +1152,6 @@ export default function App() {
                   >
                     <Download size={16} /> Export Report
                   </button>
-                </div>
-              </div>
-
-              {/* Summary Stats for 3-Way Match */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl">
-                    <Layers size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Matches</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">1,284</h4>
-                    <p className="text-[10px] text-brand-success font-bold mt-1">↗ +12% vs last month</p>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl">
-                    <Zap size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Auto-Reconciled</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">856</h4>
-                    <p className="text-[10px] text-brand-success font-bold mt-1">↗ +5% increase</p>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl">
-                    <AlertCircle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pending Exceptions</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">42</h4>
-                    <p className="text-[10px] text-brand-warning font-bold mt-1">↘ -2% improvement</p>
-                  </div>
                 </div>
               </div>
 

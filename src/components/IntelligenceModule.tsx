@@ -97,7 +97,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
           <div className="px-4 py-2 bg-slate-800/50 border border-brand-border rounded-lg flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-brand-success rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Model: GPT-4o-Cognitive</span>
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Model: Gemini</span>
             </div>
           </div>
         </div>
@@ -130,7 +130,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
           </div>
           <div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Auto-Resolved</p>
-            <h4 className="text-2xl font-bold text-white font-mono">1,429</h4>
+            <h4 className="text-2xl font-bold text-white font-mono">{clusters.filter(c => c.status === 'Resolved').length}</h4>
           </div>
         </div>
       </div>

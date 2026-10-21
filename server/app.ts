@@ -2,6 +2,7 @@ import express from 'express';
 import type { Express } from 'express';
 import { JsonStore } from './store';
 import type { Query } from './store';
+import { approveInvoice, runMatch } from './matchService';
 
 export interface AppDeps {
   store: JsonStore;
@@ -34,6 +35,19 @@ export function createApp({ store }: AppDeps): Express {
   // Empty every table (blank slate for demos / tests).
   app.post('/api/clear', (_req, res) => {
     res.json({ data: store.clear(), error: null });
+  });
+
+  // Run the three-way match. Body: { invoiceIds?: string[], all?: boolean }
+  app.post('/api/match/run', async (req, res) => {
+    const { invoiceIds, all } = req.body ?? {};
+    res.json({ data: await runMatch(store, { invoiceIds, all, actor: 'user' }), error: null });
+  });
+
+  // Human override of a flagged invoice. Body: { invoiceId }
+  app.post('/api/match/approve', async (req, res) => {
+    const { invoiceId } = req.body ?? {};
+    const r = await approveInvoice(store, String(invoiceId ?? ''), 'user');
+    res.status(r.ok ? 200 : 404).json({ data: r, error: r.ok ? null : { message: r.message, code: 'NOT_FOUND', details: '', hint: '' } });
   });
 
   // Full dump, handy for debugging and tests.

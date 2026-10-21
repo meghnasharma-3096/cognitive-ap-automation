@@ -386,14 +386,14 @@ export const ReconciliationTable = () => {
           intent: 'Acknowledgement',
           status: (item.ack_status as POStatus) || 'Confirmed',
           eta: formatDate(item.expected_eta),
-          priceDelta: item.freight_amount ? `$${Number(item.freight_amount).toFixed(2)}` : '$0.00',
+          priceDelta: `${Number(item.price_delta || 0) < 0 ? '-' : ''}$${Math.abs(Number(item.price_delta || 0)).toFixed(2)}`,
           qty: item.expected_quantity || 0,
           expectedQty: item.expected_quantity || 0,
           vendorText: `Acknowledgement received for PO ${item.po_number}.`,
           emlFilename: `Ack_${item.po_number}.eml`
         };
       });
-      setData(mappedData.length > 0 ? mappedData : MOCK_ACKNOWLEDGEMENTS);
+      setData(mappedData);
     } catch (err) {
       console.error('Failed to fetch Acknowledgement data:', err);
       toast.error('Failed to load acknowledgements');
@@ -532,8 +532,38 @@ export const ReconciliationTable = () => {
     );
   }
 
+  const ackStats = {
+    unresolved: data.filter(d => d.ack_status !== 'Confirmed').length,
+    price: data.filter(d => d.ack_status === 'Price Change').length,
+    backordered: data.filter(d => d.ack_status === 'Backorder').length,
+    confirmed: data.filter(d => d.ack_status === 'Confirmed').length,
+  };
+
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl"><AlertTriangle size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unresolved</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.unresolved} POs</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-warning/10 text-brand-warning rounded-xl"><DollarSign size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Alerts</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.price} Items</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl"><Package size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Backordered</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.backordered} POs</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl"><CheckCircle2 size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Confirmed</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.confirmed} POs</h4></div>
+        </div>
+      </div>
+
       {/* Table Header Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">

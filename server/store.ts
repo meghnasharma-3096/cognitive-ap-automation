@@ -156,6 +156,20 @@ export class JsonStore {
     return structuredClone(this.tables);
   }
 
+  /**
+   * Run `fn` with direct access to the tables as ONE atomic unit (no other
+   * request can interleave), then persist. Use for multi-step business logic.
+   */
+  transact<T>(fn: (tables: Tables) => T): Promise<T> {
+    const next = this.chain.then(() => {
+      const out = fn(this.tables);
+      this.flush();
+      return out;
+    });
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+
   /** Serialised so concurrent requests never interleave read-modify-write. */
   run(q: Query): Promise<DbResult> {
     const next = this.chain.then(() => this.exec(q));

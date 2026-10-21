@@ -542,7 +542,85 @@
       "match_status": "Pending"
     }
   ],
-  "ingesteddocuments": [],
+  "ingesteddocuments": [
+    {
+      "id": "INV-902341",
+      "document_name": "INV-902341.pdf",
+      "vendor_name": "Starlight Logistics",
+      "intent": "Invoice",
+      "confidence_score": 99.2,
+      "status": "Auto-posted",
+      "ingestion_date": "2026-03-12T08:20:00.000Z",
+      "invoice_number": "INV-902341",
+      "source": "seed"
+    },
+    {
+      "id": "ACK-77281",
+      "document_name": "ACK-77281.pdf",
+      "vendor_name": "AWS Enterprise",
+      "intent": "Acknowledgement",
+      "confidence_score": 97.8,
+      "status": "Matched",
+      "ingestion_date": "2026-03-12T08:17:00.000Z",
+      "invoice_number": null,
+      "source": "seed"
+    },
+    {
+      "id": "INQ-00129",
+      "document_name": "INQ-00129.pdf",
+      "vendor_name": "Unknown Sender",
+      "intent": "Inquiry",
+      "confidence_score": 62.1,
+      "status": "Needs Review",
+      "ingestion_date": "2026-03-12T08:10:00.000Z",
+      "invoice_number": null,
+      "source": "seed"
+    },
+    {
+      "id": "INV-902342",
+      "document_name": "INV-902342.pdf",
+      "vendor_name": "Global Tech Corp",
+      "intent": "Invoice",
+      "confidence_score": 98.5,
+      "status": "Auto-posted",
+      "ingestion_date": "2026-03-12T08:07:00.000Z",
+      "invoice_number": "INV-902342",
+      "source": "seed"
+    },
+    {
+      "id": "ACK-77282",
+      "document_name": "ACK-77282.pdf",
+      "vendor_name": "Logistics Plus Inc",
+      "intent": "Acknowledgement",
+      "confidence_score": 94.2,
+      "status": "Matched",
+      "ingestion_date": "2026-03-12T08:04:00.000Z",
+      "invoice_number": null,
+      "source": "seed"
+    },
+    {
+      "id": "INV-902343",
+      "document_name": "INV-902343.pdf",
+      "vendor_name": "Apex Manufacturing",
+      "intent": "Invoice",
+      "confidence_score": 89.4,
+      "status": "Needs Review",
+      "ingestion_date": "2026-03-11T08:00:00.000Z",
+      "invoice_number": "INV-902343",
+      "source": "seed"
+    },
+    {
+      "id": "INV-902344",
+      "document_name": "INV-902344.pdf",
+      "vendor_name": "Starlight Logistics",
+      "intent": "Invoice",
+      "confidence_score": 99.1,
+      "status": "Auto-posted",
+      "ingestion_date": "2026-03-10T08:00:00.000Z",
+      "invoice_number": "INV-902344",
+      "source": "seed"
+    }
+  ],
   "documentclusters": [
     {
       "id": "cl-1",
