@@ -637,6 +637,7 @@ export default function App() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [clusterPendingDocs, setClusterPendingDocs] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [panelKey, setPanelKey] = useState(0);
   const [timeFilter, setTimeFilter] = useState<'all' | '24h'>('all');
   const [feedTab, setFeedTab] = useState<'All' | Intent>('All');
 
@@ -719,6 +720,7 @@ export default function App() {
     const r = await resetDatabase();
     if (r.error) { toast.error('Reset failed'); return; }
     toast.success('Data reset to the sample set');
+    setPanelKey(k => k + 1);
     await refreshMetrics();
   };
 
@@ -768,7 +770,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-brand-bg">
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="bottom-right" theme="dark" richColors />
       <Sidebar active={activeView} setActive={setActiveView} />
       
       <main className="flex-1 flex flex-col min-w-0">
@@ -818,7 +820,7 @@ export default function App() {
                 </div>
               </div>
 
-              <IngestPanel onDone={refreshMetrics} />
+              <IngestPanel key={panelKey} onDone={refreshMetrics} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <STPCard rate={metrics.stp} />

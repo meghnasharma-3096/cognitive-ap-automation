@@ -183,7 +183,7 @@ export const ThreeWayMatch = () => {
           const [po, receipt, invoice] = await Promise.all([
             poNum !== 'N/A' ? fetchPoByVendor(poNum) : Promise.resolve(null),
             poNum !== 'N/A' ? fetchPOReceipt(poNum) : Promise.resolve(null),
-            invNum !== 'N/A' ? fetchVendorInvoice(invNum) : Promise.resolve(null)
+            Promise.resolve(selectedMatch.raw ?? null) // the exact row (invoice numbers can legitimately repeat: duplicates)
           ]);
           
           setDetailedData({ po, receipt, invoice });
@@ -522,17 +522,20 @@ export const ThreeWayMatch = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b border-brand-border">
                 <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Qty Billed</span>
-                <span className={`text-sm font-mono font-bold ${
-                  (detailedData?.invoice?.billed_quantity || 0) !== (detailedData?.receipt?.received_quantity || 0) 
-                    ? 'text-brand-danger' : 'text-brand-success'
-                }`}>
-                  {detailedData?.invoice?.billed_quantity || 0} units
-                </span>
+                {detailedData?.invoice?.billed_quantity == null ? (
+                  <span className="text-sm font-mono text-slate-400">not stated</span>
+                ) : (
+                  <span className={`text-sm font-mono font-bold ${
+                    detailedData.invoice.billed_quantity !== (detailedData?.receipt?.received_quantity || 0) ? 'text-brand-danger' : 'text-brand-success'
+                  }`}>
+                    {detailedData.invoice.billed_quantity} units
+                  </span>
+                )}
               </div>
               <div className="flex justify-between items-center py-2 border-b border-brand-border">
                 <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Unit Price</span>
                 <span className="text-sm font-mono text-white">
-                  ${formatCurrency(detailedData?.invoice?.unit_price || 0)}
+                  {detailedData?.invoice?.unit_price == null ? <span className="text-slate-400">not stated</span> : `$${formatCurrency(detailedData.invoice.unit_price)}`}
                 </span>
               </div>
               <div className={`flex justify-between items-center py-2 px-2 -mx-2 rounded transition-colors ${
