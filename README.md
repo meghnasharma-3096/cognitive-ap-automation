@@ -1,5 +1,7 @@
 # Cognitive AP Automation
 
+**Live URL:** [https://cognitive-ap-automation.onrender.com](https://cognitive-ap-automation.onrender.com) (free tier: first load takes about a minute; replay mode, no live LLM key)
+
 LLM-first accounts-payable prototype: vendor documents go in (any format), the model reads them, a deterministic engine does the three-way match (PO / goods receipt / invoice), humans handle the exceptions.
 
 ## Run it
