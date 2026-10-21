@@ -36,7 +36,7 @@ export class GeminiProvider implements Provider {
   private ai: GoogleGenAI;
   private models: string[];
 
-  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3-flash-preview,gemini-3.8-flash')) {
+  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest')) {
     this.ai = new GoogleGenAI({ apiKey });
     this.models = models.split(',').map(m => m.trim()).filter(Boolean);
   }
