@@ -35,6 +35,7 @@ type MatchStatus = 'Matched' | 'Variance' | 'Auto-Reconciled' | 'Pending';
 
 export const ThreeWayMatch = () => {
   const [matches, setMatches] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState<'attention' | 'newest' | 'amount'>('attention');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -157,6 +158,16 @@ export const ThreeWayMatch = () => {
     }
   };
 
+  const sortedMatches = React.useMemo(() => {
+    const rank: Record<string, number> = { Variance: 0, Pending: 1, Matched: 2 };
+    const t = (m: any) => Date.parse(m.raw?.created_at ?? m.raw?.invoice_date ?? '') || 0;
+    const list = [...matches];
+    if (sortBy === 'newest') list.sort((a, b) => t(b) - t(a));
+    else if (sortBy === 'amount') list.sort((a, b) => b.billed_amount - a.billed_amount);
+    else list.sort((a, b) => rank[a.status] - rank[b.status]);
+    return list;
+  }, [matches, sortBy]);
+
   const selectedMatch = matches.find(m => m.id === selectedId) || matches[0];
 
   useEffect(() => {
@@ -278,15 +289,21 @@ export const ThreeWayMatch = () => {
               <Download size={12} /> Export Report
             </button>
             <span className="text-[10px] font-bold text-slate-500 uppercase ml-2">Sort by:</span>
-            <select className="bg-transparent text-[10px] font-bold text-brand-accent uppercase focus:outline-none cursor-pointer">
-              <option>Newest First</option>
-              <option>Variance High to Low</option>
+            <select
+              data-testid="match-sort"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'attention' | 'newest' | 'amount')}
+              className="bg-transparent text-[10px] font-bold text-brand-accent uppercase focus:outline-none cursor-pointer"
+            >
+              <option value="attention" className="bg-slate-900">Needs Attention First</option>
+              <option value="newest" className="bg-slate-900">Newest First</option>
+              <option value="amount" className="bg-slate-900">Amount High to Low</option>
             </select>
           </div>
         </div>
         <div className="divide-y divide-brand-border max-h-64 overflow-y-auto">
           {matches.length > 0 ? (
-            matches.map((match) => (
+            sortedMatches.map((match) => (
               <button
                 key={match.id}
                 onClick={() => setSelectedId(match.id)}
