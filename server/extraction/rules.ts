@@ -30,8 +30,9 @@ function vendorFrom(text: string, senderEmail: string | null): string | null {
   const re = /\b([A-Z][A-Za-z0-9&.'-]*(?: [A-Z][A-Za-z0-9&.'-]*){0,4} (?:Company|Co\.|Inc\.?|LLC|Ltd\.?|Corp\.?|Corporation|Limited|Pvt\.? Ltd\.?|GmbH))\b/g;
   const hits = [...text.matchAll(re)].map(m => m[1]);
   if (hits.length) return cleanVendor(hits[hits.length - 1]);
-  const dom = senderEmail?.split('@')[1]?.split('.')[0];
-  return dom ? dom.charAt(0).toUpperCase() + dom.slice(1) : null;
+  // No reliable name in the text. A guess from the e-mail domain would cause false vendor mismatches, so say "unknown".
+  void senderEmail;
+  return null;
 }
 
 export function rulesExtract(text: string): any {

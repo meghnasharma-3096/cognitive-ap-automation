@@ -195,6 +195,7 @@ export async function ingestDocument(store: JsonStore, raw: RawDocument, opts: I
   let forcedReview: string | null = null;
 
   try {
+    if (opts.provider.name === 'rules' && !prep.input.text.trim()) throw new Error('RULES_NO_TEXT');
     const r = await opts.provider.extract(prep.input);
     rawExt = r.raw; model = r.model;
   } catch (e: any) {
@@ -206,7 +207,7 @@ export async function ingestDocument(store: JsonStore, raw: RawDocument, opts: I
       forcedReview = 'LLM unavailable: extracted with the offline fallback parser';
       rawExt = (await new RulesProvider().extract(prep.input)).raw;
       model = 'rules';
-    } else if (opts.provider.name === 'rules') {
+    } else if (opts.provider.name === 'rules' && msg === 'RULES_NO_TEXT') {
       const m = 'No LLM configured and this file has no text to parse offline. Set GEMINI_API_KEY to read scans and images.';
       return store.transact(t => persist(t, {
         ...base, ext: null, confidence: 0, warnings, providerName: 'rules', needsReview: true,

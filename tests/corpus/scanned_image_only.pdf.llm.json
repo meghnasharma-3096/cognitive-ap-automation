@@ -1,0 +1,28 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.88,
+  "vendor_name": "Logistics Plus",
+  "sender_email": null,
+  "invoice_number": "INV-5005",
+  "invoice_date": "2026-10-08",
+  "po_number": "PO-2024-108",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "units",
+      "sku": null,
+      "quantity": 180,
+      "unit_price": 34.9,
+      "amount": 6282.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 6282.0,
+  "payment_terms": null,
+  "acknowledgement": null,
+  "summary": "Image-only PDF invoice INV-5005: 180 @ $34.90 = $6,282.",
+  "evidence": []
+}

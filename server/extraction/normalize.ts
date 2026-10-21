@@ -153,6 +153,8 @@ export function audit(ext: Extraction, sourceText: string, opts: { llmConfidence
     for (const field of EVIDENCE_FIELDS) {
       const value = (ext as any)[field];
       if (value === null || value === undefined) continue;
+      // "No freight" is an absence, not a quotable number: a zero can't be grounded, so don't penalise it.
+      if (value === 0) continue;
       let ok: boolean;
       if (typeof value === 'number') ok = numberInText(value, flat);
       else if (field === 'invoice_number') ok = squash(flat).includes(squash(value)) || normInvoiceNo(flat).includes(normInvoiceNo(value));

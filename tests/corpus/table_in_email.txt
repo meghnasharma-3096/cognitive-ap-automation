@@ -1,0 +1,13 @@
+From: accounts@globaltech-supply.com
+Subject: Invoice INV-5006 - PO-2024-105
+
+Hello,
+
+Invoice INV-5006 as below.
+
+PO            Qty    Unit     Line total
+PO-2024-105   150    30.50    4,575.00
+Freight                       0.00
+TOTAL DUE                     $4,575.00
+
+Global Tech Accounts

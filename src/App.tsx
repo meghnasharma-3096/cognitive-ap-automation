@@ -44,8 +44,8 @@ import { Modal } from './components/Modal';
 import { supabase } from './services/supabase';
 import { runMatchApi } from './services/matchApi';
 import { populateDummyData, addData, getAllData, updateDocumentStatus, TABLES } from './services/dbService';
-import { extractDocumentData } from './services/geminiService';
-import { classifyDocumentIntent, fetchVendorInvoice, fetchPoByVendor, processDocumentPipeline, performMultimodalExtraction } from './services/AgenticService';
+import { IngestPanel } from './components/IngestPanel';
+import { resetDatabase } from './services/supabase';
 import { downloadCSV, fileToBase64 } from './utils/helpers';
 
 // --- Types ---
@@ -62,6 +62,7 @@ interface Document {
   confidence_score: number;
   status: Status;
   timestamp: string;
+  processing_ms?: number | null;
 }
 
 // --- Utilities ---
@@ -638,9 +639,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<'all' | '24h'>('all');
   const [feedTab, setFeedTab] = useState<'All' | Intent>('All');
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const multimodalInputRef = React.useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   const filteredDocs = useMemo(() => {
     if (timeFilter === 'all') return docs;
@@ -651,8 +649,8 @@ export default function App() {
     // Total Ingested: Set this to the total length of the fetched IngestedDocuments array
     const total = docs.length;
     
-    // Pending Review: Calculate this by filtering the array: documents.filter(doc => doc.status === 'Pending' || doc.status === 'Requires Review').length
-    const pending = docs.filter(doc => doc.status === 'Pending' || doc.status === 'Requires Review').length;
+    // Pending Review: Calculate this by filtering the array: documents.filter(doc => doc.status === 'Needs Review' || (doc.status as string) === 'Pending' || (doc.status as string) === 'Requires Review').length
+    const pending = docs.filter(doc => doc.status === 'Needs Review' || (doc.status as string) === 'Pending' || (doc.status as string) === 'Requires Review').length;
     
     // STP (Straight Through Processing): Calculate this dynamically using the formula: ((Total Ingested - Pending Review) / Total Ingested) * 100
     // Round it to one decimal place. Prevent division by zero if Total Ingested is 0.
@@ -664,7 +662,9 @@ export default function App() {
       Inquiry: filteredDocs.filter(d => d.intent === 'Inquiry').length,
     };
 
-    return { total, stp, pending, intents };
+    const timed = docs.filter(d => typeof d.processing_ms === 'number') as (Document & { processing_ms: number })[];
+    const avgMs = timed.length ? timed.reduce((a, d) => a + d.processing_ms, 0) / timed.length : null;
+    return { total, stp, pending, intents, avgMs };
   }, [docs, filteredDocs]);
 
   const fetchDocs = async () => {
@@ -714,87 +714,12 @@ export default function App() {
     init();
   }, []);
 
-  const handleIngestDocs = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64 = (event.target?.result as string).split(',')[1];
-      const mimeType = file.type;
-
-      const toastId = toast.loading(`AI Agent analyzing ${file.name}...`);
-      try {
-        const extracted = await extractDocumentData(base64, mimeType);
-        
-        // URGENT DEMO HOTFIX: Intent Classification Logic
-        const fileNameLower = file.name.toLowerCase();
-        // Check filename and extracted intent for keywords
-        const combinedText = `${fileNameLower} ${extracted.intent.toLowerCase()}`;
-        
-        let intent: Intent = 'Invoice';
-        if (combinedText.includes('acknowledgement') || combinedText.includes('ack')) {
-          intent = 'Acknowledgement';
-        } else if (combinedText.includes('inquiry')) {
-          intent = 'Inquiry';
-        }
-
-        const vendor_name = file.name.replace(/\.[^/.]+$/, "");
-        const confidence_score = 98;
-
-        const newDoc: Document = {
-            id: intent === 'Invoice' ? `INV-${Math.floor(Math.random() * 1000000)}` :
-                intent === 'Acknowledgement' ? `ACK-${Math.floor(Math.random() * 100000)}` :
-                `INQ-${Math.floor(Math.random() * 100000)}`,
-            vendor_name: vendor_name,
-            document_name: file.name,
-            intent: intent,
-            confidence_score: confidence_score,
-            status: intent === 'Invoice' ? 'Auto-posted' : 'Matched',
-            timestamp: new Date().toISOString()
-          };
-
-        // Supabase Insert for Ingested Document (STRICT SCHEMA)
-        try {
-          await supabase.from(TABLES.ingestedDocuments).insert([{
-            document_name: file.name,
-            vendor_name: vendor_name,
-            intent: intent,
-            status: 'Pending',
-            confidence_score: confidence_score,
-            ingestion_date: new Date().toISOString(),
-            invoice_number: intent === 'Invoice' ? newDoc.id : null
-          }]);
-        } catch (dbErr) {
-          console.error('Failed to log ingestion to Supabase:', dbErr);
-        }
-
-        if (intent === 'Invoice') {
-          const billedQty = extracted.items[0]?.quantity || 0;
-          const unitPrice = extracted.items[0]?.unitPrice || 0;
-          await addData(TABLES.vendorInvoices, {
-            invoice_number: newDoc.id,
-            po_number: extracted.poNumber,
-            billed_quantity: billedQty,
-            unit_price: unitPrice,
-            total_amount: extracted.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
-          });
-        }
-
-        toast.success(`${intent} processed and indexed.`, { id: toastId });
-        await fetchDocs();
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to process document. Please ensure it is a valid invoice or receipt.', { id: toastId });
-      }
-    };
-    reader.readAsDataURL(file);
-    // Reset input
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleReset = async () => {
+    if (!window.confirm('Reset all data back to the original sample set? Anything you ingested will be removed.')) return;
+    const r = await resetDatabase();
+    if (r.error) { toast.error('Reset failed'); return; }
+    toast.success('Data reset to the sample set');
+    await refreshMetrics();
   };
 
   const runBatchProcessing = async () => {
@@ -814,124 +739,6 @@ export default function App() {
     } catch (err) {
       console.error(err);
       toast.error('Batch processing failed. Check console for details.', { id: toastId });
-    }
-  };
-
-  const handleSimulateAgentRun = async () => {
-    const toastId = toast.loading('Agentic Engine: Starting Multi-Agent Pipeline...');
-    
-    try {
-      const sampleEmail = "Hi team, regarding PO-1044, we can only ship 10 units this week. The rest are delayed.";
-      
-      // Call the new Multi-Agent Orchestrator
-      const pipelineResult = await processDocumentPipeline(sampleEmail);
-
-      // Supabase Insert for Ingested Document (Text Ingestion)
-      try {
-        await supabase.from(TABLES.ingestedDocuments).insert([{
-          document_name: 'Vendor Email: PO-1044 Update',
-          vendor_name: 'Email Ingestion',
-          intent: pipelineResult.intent, 
-          status: 'Pending',
-          confidence_score: 95,
-          ingestion_date: new Date().toISOString()
-        }]);
-      } catch (dbErr) {
-        console.error('Failed to log text ingestion to Supabase:', dbErr);
-      }
-
-      console.log("Pipeline Result:", pipelineResult);
-
-      toast.success(`Multi-Agent Pipeline Complete`, { 
-        id: toastId,
-        description: `Intent: ${pipelineResult.intent} | PO: ${pipelineResult.extraction.poNumber || 'None'}`,
-        duration: 5000
-      });
-
-      // Also show the raw JSON in a second toast for the demo
-      setTimeout(() => {
-        toast.info("Orchestrator Payload", {
-          description: JSON.stringify(pipelineResult, null, 2),
-          duration: 8000
-        });
-      }, 1000);
-      
-      await refreshMetrics();
-    } catch (err) {
-      console.error(err);
-      toast.error('Simulation failed. Check console for details.', { id: toastId });
-    }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const toastId = toast.loading(`Uploading and analyzing ${file.name}...`);
-
-    try {
-      const base64 = await fileToBase64(file);
-      const result = await performMultimodalExtraction(base64, file.type);
-      
-      // URGENT DEMO HOTFIX: Intent Classification Logic
-      const fileNameLower = file.name.toLowerCase();
-      // Check filename and extracted intent for keywords
-      const combinedText = `${fileNameLower} ${result.intent?.toLowerCase() || ''}`;
-      
-      let intent: Intent = 'Invoice';
-      if (combinedText.includes('acknowledgement') || combinedText.includes('ack')) {
-        intent = 'Acknowledgement';
-      } else if (combinedText.includes('inquiry')) {
-        intent = 'Inquiry';
-      }
-
-      const vendor_name = file.name.replace(/\.[^/.]+$/, "");
-      const confidence_score = 98;
-
-      // Supabase Insert for Ingested Document (STRICT SCHEMA)
-      try {
-        await supabase.from(TABLES.ingestedDocuments).insert([{
-          document_name: file.name,
-          vendor_name: vendor_name,
-          intent: intent, 
-          status: 'Pending',
-          confidence_score: confidence_score,
-          ingestion_date: new Date().toISOString()
-        }]);
-      } catch (dbErr) {
-        console.error('Failed to log ingestion to Supabase:', dbErr);
-      }
-
-      const newDoc: Document = {
-        id: intent === 'Invoice' ? `INV-${Math.floor(Math.random() * 1000000)}` : 
-            intent === 'Acknowledgement' ? `ACK-${Math.floor(Math.random() * 100000)}` : 
-            `INQ-${Math.floor(Math.random() * 100000)}`,
-        vendor_name: vendor_name,
-        document_name: file.name,
-        intent: intent,
-        confidence_score: confidence_score,
-        status: intent === 'Invoice' ? 'Auto-posted' : 'Matched',
-        timestamp: new Date().toISOString()
-      };
-      await fetchDocs();
-
-      toast.success('Extraction Complete', {
-        id: toastId,
-        description: `Vendor: ${vendor_name} | Intent: ${intent} | Confidence: ${confidence_score}%`,
-        duration: 6000
-      });
-
-      console.log('Multimodal Extraction Result (Hacked):', { ...result, vendor_name, intent, confidence_score });
-      
-    } catch (err) {
-      console.error('File upload failed:', err);
-      toast.error('Failed to analyze document.', { id: toastId });
-    } finally {
-      setIsUploading(false);
-      if (multimodalInputRef.current) {
-        multimodalInputRef.current.value = '';
-      }
     }
   };
 
@@ -961,13 +768,6 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-brand-bg">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="image/*,application/pdf"
-        onChange={handleFileChange}
-      />
       <Toaster position="top-right" theme="dark" richColors />
       <Sidebar active={activeView} setActive={setActiveView} />
       
@@ -1003,25 +803,11 @@ export default function App() {
                     <Clock size={16} /> Last 24h
                   </button>
                   <button 
-                    onClick={handleIngestDocs}
-                    className="px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-brand-accent/20 flex items-center gap-2"
+                    data-testid="reset-data"
+                    onClick={handleReset}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold transition-colors border border-brand-border flex items-center gap-2"
                   >
-                    <Inbox size={16} /> Ingest Docs
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={multimodalInputRef}
-                    onChange={handleFileUpload}
-                    accept=".png,.jpg,.jpeg,.pdf"
-                    className="hidden"
-                  />
-                  <button 
-                    onClick={() => multimodalInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold transition-colors border border-brand-border flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isUploading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
-                    Upload Vendor Document
+                    <RefreshCw size={16} /> Reset Data
                   </button>
                   <button 
                     onClick={runBatchProcessing}
@@ -1031,6 +817,8 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <IngestPanel onDone={refreshMetrics} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <STPCard rate={metrics.stp} />
@@ -1044,11 +832,11 @@ export default function App() {
                 />
                 <KPICard 
                   title="Avg Processing Time" 
-                  value="1.2s" 
-                  change="0.3s" 
+                  value={metrics.avgMs === null ? '–' : `${(metrics.avgMs / 1000).toFixed(1)}s`} 
+                  change={metrics.avgMs === null ? 'No data' : 'Measured'} 
                   trend="down" 
                   icon={Clock}
-                  subtext="AI inference latency decreased"
+                  subtext="Average read time of documents ingested live"
                 />
                 <KPICard 
                   title="Pending Review" 

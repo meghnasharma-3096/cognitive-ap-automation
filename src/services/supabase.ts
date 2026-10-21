@@ -106,13 +106,6 @@ class QueryBuilder implements PromiseLike<DbResult> {
 
 export const supabase = {
   from: (table: string) => new QueryBuilder(table),
-  functions: {
-    /** Server-side functions. 'gemini-proxy' is now handled by POST /api/llm. */
-    invoke: async (name: string, opts: { body?: unknown } = {}) => {
-      const route = name === 'gemini-proxy' ? '/api/llm' : `/api/fn/${name}`;
-      return post(route, opts.body ?? {});
-    },
-  },
 };
 
 /** Restore the seed dataset (also exposed as POST /api/reset). */
