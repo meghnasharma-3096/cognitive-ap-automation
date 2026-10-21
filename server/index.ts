@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { createServer as createVite } from 'vite';
 import { createApp } from './app';
 import { JsonStore } from './store';
+import { chooseProvider } from './extraction/providers';
+import { startInbox } from './inbox';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const store = new JsonStore(
@@ -16,7 +18,8 @@ const store = new JsonStore(
   path.join(root, 'data', 'seed.json'),
 );
 
-const app = createApp({ store });
+const choice = chooseProvider(process.env);
+const app = createApp({ store, provider: choice.provider, providerReason: choice.reason });
 const server = http.createServer(app);
 
 const vite = await createVite({
@@ -29,5 +32,8 @@ app.use(vite.middlewares);
 const port = Number(process.env.PORT ?? 3000);
 server.listen(port, '0.0.0.0', () => {
   console.log(`\n  Cognitive AP running at http://localhost:${port}`);
+  console.log(`  Extraction: ${choice.provider.name} (${choice.reason})`);
   console.log(`  Data: ${process.env.DB_PATH ?? 'data/db.json'}  (reset: POST /api/reset or the Reset button)\n`);
 });
+
+startInbox(store, choice.provider, process.env.INBOX_DIR ?? path.join(root, 'data', 'inbox'));
