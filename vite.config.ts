@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(({ mode }) => {
   return {
-    base: mode === 'production' ? '/cognitive-ap-automation/' : '/',
+    base: '/', // served from the site root (Node host); GitHub Pages is no longer used
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
