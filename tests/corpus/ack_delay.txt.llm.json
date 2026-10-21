@@ -1,0 +1,30 @@
+{
+  "document_type": "acknowledgement",
+  "confidence": 0.95,
+  "vendor_name": "Logistics Plus",
+  "sender_email": "sales@logisticsplus.com",
+  "invoice_number": null,
+  "invoice_date": null,
+  "po_number": "PO-2024-103",
+  "other_po_numbers": [],
+  "currency": null,
+  "line_items": [],
+  "subtotal": null,
+  "freight_amount": null,
+  "tax_amount": null,
+  "total_amount": null,
+  "payment_terms": null,
+  "acknowledgement": {
+    "status": "Delayed",
+    "quantity": null,
+    "eta": "2026-11-05",
+    "new_unit_price": null
+  },
+  "summary": "Logistics Plus: PO-2024-103 delayed, new ETA 2026-11-05.",
+  "evidence": [
+    {
+      "field": "po_number",
+      "quote": "PO-2024-103"
+    }
+  ]
+}

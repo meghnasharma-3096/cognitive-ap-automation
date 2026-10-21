@@ -1,0 +1,28 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.9,
+  "vendor_name": "AWS Ent",
+  "sender_email": null,
+  "invoice_number": "INV-5004",
+  "invoice_date": "2026-10-07",
+  "po_number": "PO-2024-109",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "Cloud gateway licence",
+      "sku": null,
+      "quantity": 190,
+      "unit_price": 34.5,
+      "amount": 6555.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 6555.0,
+  "payment_terms": "Net 30",
+  "acknowledgement": null,
+  "summary": "Scanned invoice INV-5004 from AWS Ent for $6,555.00.",
+  "evidence": []
+}

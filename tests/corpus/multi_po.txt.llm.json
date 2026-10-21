@@ -1,0 +1,31 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "Global Tech",
+  "sender_email": "ar@globaltech-supply.com",
+  "invoice_number": "INV-5007",
+  "invoice_date": null,
+  "po_number": "PO-2024-100",
+  "other_po_numbers": [
+    "PO-2024-102"
+  ],
+  "currency": "USD",
+  "line_items": [],
+  "subtotal": null,
+  "freight_amount": null,
+  "tax_amount": null,
+  "total_amount": 5610.0,
+  "payment_terms": null,
+  "acknowledgement": null,
+  "summary": "Combined invoice INV-5007 spanning two POs.",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "Invoice INV-5007"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$5,610.00"
+    }
+  ]
+}

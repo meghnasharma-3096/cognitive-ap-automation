@@ -42,9 +42,11 @@ import { ReportingModule } from './components/ReportingModule';
 import { IntelligenceModule } from './components/IntelligenceModule';
 import { Modal } from './components/Modal';
 import { supabase } from './services/supabase';
+import { runMatchApi } from './services/matchApi';
 import { populateDummyData, addData, getAllData, updateDocumentStatus, TABLES } from './services/dbService';
-import { extractDocumentData } from './services/geminiService';
-import { executeThreeWayMatch, classifyDocumentIntent, fetchVendorInvoice, fetchPoByVendor, processDocumentPipeline, performMultimodalExtraction } from './services/AgenticService';
+import { getClusters } from './services/clusterApi';
+import { IngestPanel } from './components/IngestPanel';
+import { resetDatabase } from './services/supabase';
 import { downloadCSV, fileToBase64 } from './utils/helpers';
 
 // --- Types ---
@@ -61,19 +63,8 @@ interface Document {
   confidence_score: number;
   status: Status;
   timestamp: string;
+  processing_ms?: number | null;
 }
-
-// --- Mock Data ---
-
-const INITIAL_DOCS: Document[] = [
-  { id: 'INV-902341', vendor_name: 'Starlight Logistics', document_name: 'INV-902341.pdf', intent: 'Invoice', confidence_score: 99.2, status: 'Auto-posted', timestamp: new Date('2026-03-12T08:20:00Z').toISOString() },
-  { id: 'ACK-77281', vendor_name: 'AWS Enterprise', document_name: 'ACK-77281.pdf', intent: 'Acknowledgement', confidence_score: 97.8, status: 'Matched', timestamp: new Date('2026-03-12T08:17:00Z').toISOString() },
-  { id: 'INQ-00129', vendor_name: 'Unknown Sender', document_name: 'INQ-00129.pdf', intent: 'Inquiry', confidence_score: 62.1, status: 'Needs Review', timestamp: new Date('2026-03-12T08:10:00Z').toISOString() },
-  { id: 'INV-902342', vendor_name: 'Global Tech Corp', document_name: 'INV-902342.pdf', intent: 'Invoice', confidence_score: 98.5, status: 'Auto-posted', timestamp: new Date('2026-03-12T08:07:00Z').toISOString() },
-  { id: 'ACK-77282', vendor_name: 'Logistics Plus Inc', document_name: 'ACK-77282.pdf', intent: 'Acknowledgement', confidence_score: 94.2, status: 'Matched', timestamp: new Date('2026-03-12T08:04:00Z').toISOString() },
-  { id: 'INV-902343', vendor_name: 'Apex Manufacturing', document_name: 'INV-902343.pdf', intent: 'Invoice', confidence_score: 89.4, status: 'Needs Review', timestamp: new Date('2026-03-11T08:00:00Z').toISOString() },
-  { id: 'INV-902344', vendor_name: 'Starlight Logistics', document_name: 'INV-902344.pdf', intent: 'Invoice', confidence_score: 99.1, status: 'Auto-posted', timestamp: new Date('2026-03-10T08:00:00Z').toISOString() },
-];
 
 // --- Utilities ---
 
@@ -158,12 +149,12 @@ const Sidebar = ({ active, setActive }: { active: View, setActive: (v: View) => 
             <div className="w-2 h-2 bg-brand-success rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            AI Matching Engine processing 142 new invoices.
+            Match engine ready. Data is stored locally.
           </p>
           <div className="mt-3 h-1 bg-slate-800 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
-              animate={{ width: '65%' }}
+              animate={{ width: '100%' }}
               className="h-full bg-brand-accent"
             />
           </div>
@@ -313,7 +304,7 @@ const IntentCard = ({ intent, count, description, color, onClick }: any) => {
         </div>
         <span className="text-2xl font-bold text-white font-mono">{(count || 0).toLocaleString()}</span>
       </div>
-      <h4 className="text-lg font-bold text-white mb-1 group-hover:text-brand-accent transition-colors">{intent}s</h4>
+      <h4 className="text-lg font-bold text-white mb-1 group-hover:text-brand-accent transition-colors">{intent === 'Inquiry' ? 'Inquiries' : `${intent}s`}</h4>
       <p className="text-xs text-slate-400 leading-relaxed">{description}</p>
       
       <div className="mt-6 pt-6 border-t border-brand-border flex items-center justify-between">
@@ -438,7 +429,7 @@ const DocumentFeed = ({ docs, isLoading, activeTab, setActiveTab }: { docs: Docu
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              {tab === 'All' ? 'All Documents' : `${tab}s`}
+              {tab === 'All' ? 'All Documents' : tab === 'Inquiry' ? 'Inquiries' : `${tab}s`}
               {activeTab === tab && (
                 <motion.div 
                   layoutId="activeTab"
@@ -647,11 +638,9 @@ export default function App() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [clusterPendingDocs, setClusterPendingDocs] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [panelKey, setPanelKey] = useState(0);
   const [timeFilter, setTimeFilter] = useState<'all' | '24h'>('all');
   const [feedTab, setFeedTab] = useState<'All' | Intent>('All');
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const multimodalInputRef = React.useRef<HTMLInputElement>(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   const filteredDocs = useMemo(() => {
     if (timeFilter === 'all') return docs;
@@ -662,8 +651,8 @@ export default function App() {
     // Total Ingested: Set this to the total length of the fetched IngestedDocuments array
     const total = docs.length;
     
-    // Pending Review: Calculate this by filtering the array: documents.filter(doc => doc.status === 'Pending' || doc.status === 'Requires Review').length
-    const pending = docs.filter(doc => doc.status === 'Pending' || doc.status === 'Requires Review').length;
+    // Pending Review: Calculate this by filtering the array: documents.filter(doc => doc.status === 'Needs Review' || (doc.status as string) === 'Pending' || (doc.status as string) === 'Requires Review').length
+    const pending = docs.filter(doc => doc.status === 'Needs Review' || (doc.status as string) === 'Pending' || (doc.status as string) === 'Requires Review').length;
     
     // STP (Straight Through Processing): Calculate this dynamically using the formula: ((Total Ingested - Pending Review) / Total Ingested) * 100
     // Round it to one decimal place. Prevent division by zero if Total Ingested is 0.
@@ -675,35 +664,30 @@ export default function App() {
       Inquiry: filteredDocs.filter(d => d.intent === 'Inquiry').length,
     };
 
-    return { total, stp, pending, intents };
+    const timed = docs.filter(d => typeof d.processing_ms === 'number') as (Document & { processing_ms: number })[];
+    const avgMs = timed.length ? timed.reduce((a, d) => a + d.processing_ms, 0) / timed.length : null;
+    return { total, stp, pending, intents, avgMs };
   }, [docs, filteredDocs]);
 
   const fetchDocs = async () => {
     try {
       const ingested = await getAllData(TABLES.ingestedDocuments);
-      if (ingested.length === 0) {
-        // Seed with initial docs if empty (DB generates its own uuid ids)
-        for (const doc of INITIAL_DOCS) {
-          const { id, timestamp, ...docData } = doc;
-          await addData(TABLES.ingestedDocuments, { ...docData, ingestion_date: timestamp });
-        }
-        setDocs(INITIAL_DOCS);
-      } else {
-        setDocs([...ingested].reverse().map(d => ({ ...d, timestamp: d.ingestion_date })));
-      }
+      setDocs(
+        [...ingested]
+          .sort((x, y) => String(y.ingestion_date).localeCompare(String(x.ingestion_date)))
+          .map(d => ({ ...d, timestamp: d.ingestion_date }))
+      );
     } catch (err) {
-      console.error('Failed to fetch docs from Supabase:', err);
-      toast.error('Failed to connect to database');
+      console.error('Failed to fetch documents:', err);
+      toast.error('Failed to load documents');
     }
   };
 
   const refreshMetrics = async () => {
     await fetchDocs();
     try {
-      const clusters = await getAllData(TABLES.documentClusters);
-      const pendingCount = clusters
-        .filter(c => c.status === 'Requires Review')
-        .reduce((sum, c) => sum + (c.document_count || 0), 0);
+      const clusters = await getClusters();
+      const pendingCount = clusters.reduce((sum, c) => sum + (c.document_count || 0), 0);
       setClusterPendingDocs(pendingCount);
     } catch (err) {
       console.error('Failed to fetch clusters for metrics:', err);
@@ -730,281 +714,32 @@ export default function App() {
     init();
   }, []);
 
-  const handleIngestDocs = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64 = (event.target?.result as string).split(',')[1];
-      const mimeType = file.type;
-
-      const toastId = toast.loading(`AI Agent analyzing ${file.name}...`);
-      try {
-        const extracted = await extractDocumentData(base64, mimeType);
-        
-        // URGENT DEMO HOTFIX: Intent Classification Logic
-        const fileNameLower = file.name.toLowerCase();
-        // Check filename and extracted intent for keywords
-        const combinedText = `${fileNameLower} ${extracted.intent.toLowerCase()}`;
-        
-        let intent: Intent = 'Invoice';
-        if (combinedText.includes('acknowledgement') || combinedText.includes('ack')) {
-          intent = 'Acknowledgement';
-        } else if (combinedText.includes('inquiry')) {
-          intent = 'Inquiry';
-        }
-
-        const vendor_name = file.name.replace(/\.[^/.]+$/, "");
-        const confidence_score = 98;
-
-        const newDoc: Document = {
-            id: intent === 'Invoice' ? `INV-${Math.floor(Math.random() * 1000000)}` :
-                intent === 'Acknowledgement' ? `ACK-${Math.floor(Math.random() * 100000)}` :
-                `INQ-${Math.floor(Math.random() * 100000)}`,
-            vendor_name: vendor_name,
-            document_name: file.name,
-            intent: intent,
-            confidence_score: confidence_score,
-            status: intent === 'Invoice' ? 'Auto-posted' : 'Matched',
-            timestamp: new Date().toISOString()
-          };
-
-        // Supabase Insert for Ingested Document (STRICT SCHEMA)
-        try {
-          await supabase.from(TABLES.ingestedDocuments).insert([{
-            document_name: file.name,
-            vendor_name: vendor_name,
-            intent: intent,
-            status: 'Pending',
-            confidence_score: confidence_score,
-            ingestion_date: new Date().toISOString(),
-            invoice_number: intent === 'Invoice' ? newDoc.id : null
-          }]);
-        } catch (dbErr) {
-          console.error('Failed to log ingestion to Supabase:', dbErr);
-        }
-
-        if (intent === 'Invoice') {
-          const billedQty = extracted.items[0]?.quantity || 0;
-          const unitPrice = extracted.items[0]?.unitPrice || 0;
-          await addData(TABLES.vendorInvoices, {
-            invoice_number: newDoc.id,
-            po_number: extracted.poNumber,
-            billed_quantity: billedQty,
-            unit_price: unitPrice,
-            total_amount: extracted.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
-          });
-        }
-
-        toast.success(`${intent} processed and indexed.`, { id: toastId });
-        await fetchDocs();
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to process document. Please ensure it is a valid invoice or receipt.', { id: toastId });
-      }
-    };
-    reader.readAsDataURL(file);
-    // Reset input
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleReset = async () => {
+    if (!window.confirm('Reset all data back to the original sample set? Anything you ingested will be removed.')) return;
+    const r = await resetDatabase();
+    if (r.error) { toast.error('Reset failed'); return; }
+    toast.success('Data reset to the sample set');
+    setPanelKey(k => k + 1);
+    await refreshMetrics();
   };
 
   const runBatchProcessing = async () => {
-    const toastId = toast.loading('Batch Processing: Starting AI Matching Loop...');
-    
+    const toastId = toast.loading('Batch Processing: running three-way match...');
     try {
-      // Step A: Query pending invoices
-      const { data: pendingInvoices, error: fetchError } = await supabase
-        .from(TABLES.vendorInvoices)
-        .select('*')
-        .in('match_status', ['Pending', null]);
-
-      if (fetchError) throw fetchError;
-
-      if (!pendingInvoices || pendingInvoices.length === 0) {
+      const result = await runMatchApi();
+      if (result.processed === 0) {
         toast.info('No pending invoices found for processing.', { id: toastId });
         return;
       }
-
-      let successCount = 0;
-      let exceptionCount = 0;
-
-      // Step B: Loop sequentially
-      for (const invoice of pendingInvoices) {
-        // Step C: Execute 3-way match
-        const result = await executeThreeWayMatch({
-          invoice_number: invoice.invoice_number,
-          po_number: invoice.po_number,
-          billed_quantity: invoice.billed_quantity || 0,
-          freight_amount: invoice.freight_amount || 0
-        });
-
-        if (result.success) {
-          // Step D: Perfect Match
-          await supabase.from(TABLES.successReports).insert([{
-            invoice_number: invoice.invoice_number,
-            amount: invoice.total_amount || 0,
-            status: 'Processed',
-            date: new Date().toISOString()
-          }]);
-
-          await supabase.from(TABLES.vendorInvoices)
-            .update({ match_status: 'Success' })
-            .eq('invoice_number', invoice.invoice_number);
-
-          successCount++;
-        } else {
-          // Step E: Exception
-          const po = await fetchPoByVendor(invoice.po_number);
-          await supabase.from(TABLES.exceptionReports).insert([{
-            invoice_number: invoice.invoice_number,
-            po_number: invoice.po_number,
-            billed_amount: invoice.total_amount || 0,
-            vendor: po?.vendor_name || 'Unknown',
-            notes: result.reason,
-            date: new Date().toISOString()
-          }]);
-
-          await supabase.from(TABLES.vendorInvoices)
-            .update({ match_status: 'Exception' })
-            .eq('invoice_number', invoice.invoice_number);
-
-          exceptionCount++;
-        }
-      }
-
-      toast.success(`Batch Processing Complete`, { 
+      toast.success('Batch Processing Complete', {
         id: toastId,
-        description: `Processed ${pendingInvoices.length} invoices. Success: ${successCount}, Exceptions: ${exceptionCount}`,
+        description: `Processed ${result.processed} invoices. Success: ${result.success}, Exceptions: ${result.exceptions}`,
         duration: 5000
       });
-      
       await refreshMetrics();
     } catch (err) {
       console.error(err);
       toast.error('Batch processing failed. Check console for details.', { id: toastId });
-    }
-  };
-
-  const handleSimulateAgentRun = async () => {
-    const toastId = toast.loading('Agentic Engine: Starting Multi-Agent Pipeline...');
-    
-    try {
-      const sampleEmail = "Hi team, regarding PO-1044, we can only ship 10 units this week. The rest are delayed.";
-      
-      // Call the new Multi-Agent Orchestrator
-      const pipelineResult = await processDocumentPipeline(sampleEmail);
-
-      // Supabase Insert for Ingested Document (Text Ingestion)
-      try {
-        await supabase.from(TABLES.ingestedDocuments).insert([{
-          document_name: 'Vendor Email: PO-1044 Update',
-          vendor_name: 'Email Ingestion',
-          intent: pipelineResult.intent, 
-          status: 'Pending',
-          confidence_score: 95,
-          ingestion_date: new Date().toISOString()
-        }]);
-      } catch (dbErr) {
-        console.error('Failed to log text ingestion to Supabase:', dbErr);
-      }
-
-      console.log("Pipeline Result:", pipelineResult);
-
-      toast.success(`Multi-Agent Pipeline Complete`, { 
-        id: toastId,
-        description: `Intent: ${pipelineResult.intent} | PO: ${pipelineResult.extraction.poNumber || 'None'}`,
-        duration: 5000
-      });
-
-      // Also show the raw JSON in a second toast for the demo
-      setTimeout(() => {
-        toast.info("Orchestrator Payload", {
-          description: JSON.stringify(pipelineResult, null, 2),
-          duration: 8000
-        });
-      }, 1000);
-      
-      await refreshMetrics();
-    } catch (err) {
-      console.error(err);
-      toast.error('Simulation failed. Check console for details.', { id: toastId });
-    }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const toastId = toast.loading(`Uploading and analyzing ${file.name}...`);
-
-    try {
-      const base64 = await fileToBase64(file);
-      const result = await performMultimodalExtraction(base64, file.type);
-      
-      // URGENT DEMO HOTFIX: Intent Classification Logic
-      const fileNameLower = file.name.toLowerCase();
-      // Check filename and extracted intent for keywords
-      const combinedText = `${fileNameLower} ${result.intent?.toLowerCase() || ''}`;
-      
-      let intent: Intent = 'Invoice';
-      if (combinedText.includes('acknowledgement') || combinedText.includes('ack')) {
-        intent = 'Acknowledgement';
-      } else if (combinedText.includes('inquiry')) {
-        intent = 'Inquiry';
-      }
-
-      const vendor_name = file.name.replace(/\.[^/.]+$/, "");
-      const confidence_score = 98;
-
-      // Supabase Insert for Ingested Document (STRICT SCHEMA)
-      try {
-        await supabase.from(TABLES.ingestedDocuments).insert([{
-          document_name: file.name,
-          vendor_name: vendor_name,
-          intent: intent, 
-          status: 'Pending',
-          confidence_score: confidence_score,
-          ingestion_date: new Date().toISOString()
-        }]);
-      } catch (dbErr) {
-        console.error('Failed to log ingestion to Supabase:', dbErr);
-      }
-
-      const newDoc: Document = {
-        id: intent === 'Invoice' ? `INV-${Math.floor(Math.random() * 1000000)}` : 
-            intent === 'Acknowledgement' ? `ACK-${Math.floor(Math.random() * 100000)}` : 
-            `INQ-${Math.floor(Math.random() * 100000)}`,
-        vendor_name: vendor_name,
-        document_name: file.name,
-        intent: intent,
-        confidence_score: confidence_score,
-        status: intent === 'Invoice' ? 'Auto-posted' : 'Matched',
-        timestamp: new Date().toISOString()
-      };
-      await fetchDocs();
-
-      toast.success('Extraction Complete', {
-        id: toastId,
-        description: `Vendor: ${vendor_name} | Intent: ${intent} | Confidence: ${confidence_score}%`,
-        duration: 6000
-      });
-
-      console.log('Multimodal Extraction Result (Hacked):', { ...result, vendor_name, intent, confidence_score });
-      
-    } catch (err) {
-      console.error('File upload failed:', err);
-      toast.error('Failed to analyze document.', { id: toastId });
-    } finally {
-      setIsUploading(false);
-      if (multimodalInputRef.current) {
-        multimodalInputRef.current.value = '';
-      }
     }
   };
 
@@ -1034,14 +769,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-brand-bg">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="image/*,application/pdf"
-        onChange={handleFileChange}
-      />
-      <Toaster position="top-right" theme="dark" richColors />
+      <Toaster position="bottom-right" theme="dark" richColors />
       <Sidebar active={activeView} setActive={setActiveView} />
       
       <main className="flex-1 flex flex-col min-w-0">
@@ -1076,25 +804,11 @@ export default function App() {
                     <Clock size={16} /> Last 24h
                   </button>
                   <button 
-                    onClick={handleIngestDocs}
-                    className="px-4 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-lg text-sm font-bold transition-colors shadow-lg shadow-brand-accent/20 flex items-center gap-2"
+                    data-testid="reset-data"
+                    onClick={handleReset}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold transition-colors border border-brand-border flex items-center gap-2"
                   >
-                    <Inbox size={16} /> Ingest Docs
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={multimodalInputRef}
-                    onChange={handleFileUpload}
-                    accept=".png,.jpg,.jpeg,.pdf"
-                    className="hidden"
-                  />
-                  <button 
-                    onClick={() => multimodalInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold transition-colors border border-brand-border flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isUploading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
-                    Upload Vendor Document
+                    <RefreshCw size={16} /> Reset Data
                   </button>
                   <button 
                     onClick={runBatchProcessing}
@@ -1104,6 +818,8 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <IngestPanel key={panelKey} onDone={refreshMetrics} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <STPCard rate={metrics.stp} />
@@ -1117,11 +833,11 @@ export default function App() {
                 />
                 <KPICard 
                   title="Avg Processing Time" 
-                  value="1.2s" 
-                  change="0.3s" 
+                  value={metrics.avgMs === null ? '–' : (metrics.avgMs < 1000 ? `${Math.round(metrics.avgMs)}ms` : `${(metrics.avgMs / 1000).toFixed(1)}s`)} 
+                  change={metrics.avgMs === null ? 'No data' : 'Measured'} 
                   trend="down" 
                   icon={Clock}
-                  subtext="AI inference latency decreased"
+                  subtext="Average read time of documents ingested live"
                 />
                 <KPICard 
                   title="Pending Review" 
@@ -1200,46 +916,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Summary Stats for Acknowledgements */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl">
-                    <AlertTriangle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unresolved</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">42 Lines</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-warning/10 text-brand-warning rounded-xl">
-                    <Clock size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Alerts</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">12 Items</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl">
-                    <AlertCircle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Backordered</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">8 POs</h4>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl">
-                    <CheckCircle2 size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Matched Today</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">184 Lines</h4>
-                  </div>
-                </div>
-              </div>
-
               <ReconciliationTable />
             </motion.div>
           )}
@@ -1253,7 +929,7 @@ export default function App() {
               <div className="flex items-end justify-between">
                 <div>
                   <h1 className="text-4xl font-bold text-white tracking-tight mb-2">3-Way Match Overview</h1>
-                  <p className="text-slate-400">Reconciling Purchase Orders, Receipts, and Invoices for Q4 Operations.</p>
+                  <p className="text-slate-400">Reconciling purchase orders, goods receipts and vendor invoices.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
@@ -1265,40 +941,6 @@ export default function App() {
                   >
                     <Download size={16} /> Export Report
                   </button>
-                </div>
-              </div>
-
-              {/* Summary Stats for 3-Way Match */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl">
-                    <Layers size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Matches</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">1,284</h4>
-                    <p className="text-[10px] text-brand-success font-bold mt-1">↗ +12% vs last month</p>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl">
-                    <Zap size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Auto-Reconciled</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">856</h4>
-                    <p className="text-[10px] text-brand-success font-bold mt-1">↗ +5% increase</p>
-                  </div>
-                </div>
-                <div className="glass-card p-6 flex items-center gap-4">
-                  <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl">
-                    <AlertCircle size={24} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pending Exceptions</p>
-                    <h4 className="text-2xl font-bold text-white font-mono">42</h4>
-                    <p className="text-[10px] text-brand-warning font-bold mt-1">↘ -2% improvement</p>
-                  </div>
                 </div>
               </div>
 

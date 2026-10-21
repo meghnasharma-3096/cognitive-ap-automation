@@ -1,0 +1,37 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "XYZ Company",
+  "sender_email": "billing@officemax-corporate.com",
+  "invoice_number": "INV-88392",
+  "invoice_date": "2026-03-13",
+  "po_number": "PO-4017",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [],
+  "subtotal": null,
+  "freight_amount": 45.0,
+  "tax_amount": null,
+  "total_amount": 1953.94,
+  "payment_terms": "Net 30",
+  "acknowledgement": null,
+  "summary": "Invoice INV-88392 for $1,953.94 against PO-4017 incl. $45 freight.",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "INV-88392"
+    },
+    {
+      "field": "po_number",
+      "quote": "PO-4017"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$1,953.94"
+    },
+    {
+      "field": "freight_amount",
+      "quote": "$45.00 freight"
+    }
+  ]
+}

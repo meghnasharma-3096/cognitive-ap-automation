@@ -45,293 +45,6 @@ export interface PORecord {
   emlFilename?: string;
 }
 
-const MOCK_ACKNOWLEDGEMENTS: PORecord[] = [
-  {
-    id: 'ack-1',
-    poNumber: 'PO-2024-801',
-    vendor: 'Uline',
-    vendor_name: 'Uline',
-    item_sku: 'UL-9920',
-    expected_quantity: 500,
-    expected_eta: 'Mar 20, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Industrial Packaging Tape', sku: 'UL-9920' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-20',
-    priceDelta: '$0.00',
-    qty: 500,
-    expectedQty: 500,
-    vendorText: 'Order confirmed. Shipping via UPS Ground.',
-    emlFilename: 'Ack_PO-2024-801.eml'
-  },
-  {
-    id: 'ack-2',
-    poNumber: 'PO-2024-802',
-    vendor: 'Global Freight',
-    vendor_name: 'Global Freight',
-    item_sku: 'GF-PJ-01',
-    expected_quantity: 12,
-    expected_eta: 'Apr 05, 12:00 PM',
-    ack_status: 'Delayed',
-    item: { name: 'Pallet Jack - Heavy Duty', sku: 'GF-PJ-01' },
-    intent: 'Acknowledgement',
-    status: 'Delayed',
-    eta: '2024-04-05',
-    priceDelta: '$0.00',
-    qty: 12,
-    expectedQty: 12,
-    vendorText: 'Delayed due to weather conditions in the Midwest hub.',
-    emlFilename: 'Ack_PO-2024-802.eml'
-  },
-  {
-    id: 'ack-3',
-    poNumber: 'PO-2024-803',
-    vendor: 'Dell',
-    vendor_name: 'Dell',
-    item_sku: 'DELL-PW-58',
-    expected_quantity: 5,
-    expected_eta: 'Mar 25, 12:00 PM',
-    ack_status: 'Price Change',
-    item: { name: 'Precision Workstation 5820', sku: 'DELL-PW-58' },
-    intent: 'Acknowledgement',
-    status: 'Price Change',
-    eta: '2024-03-25',
-    priceDelta: '+$150.00',
-    qty: 5,
-    expectedQty: 5,
-    vendorText: 'Price increased due to raw material shortage (semiconductors).',
-    emlFilename: 'Ack_PO-2024-803.eml'
-  },
-  {
-    id: 'ack-4',
-    poNumber: 'PO-2024-804',
-    vendor: 'Fastenal',
-    vendor_name: 'Fastenal',
-    item_sku: 'FAST-HB-08',
-    expected_quantity: 50,
-    expected_eta: 'Apr 15, 12:00 PM',
-    ack_status: 'Backorder',
-    item: { name: 'Grade 8 Hex Bolts - 1000pk', sku: 'FAST-HB-08' },
-    intent: 'Acknowledgement',
-    status: 'Backorder',
-    eta: '2024-04-15',
-    priceDelta: '$0.00',
-    qty: 0,
-    expectedQty: 50,
-    vendorText: 'Item currently on backorder. Estimated restock in 3 weeks.',
-    emlFilename: 'Ack_PO-2024-804.eml'
-  },
-  {
-    id: 'ack-5',
-    poNumber: 'PO-2024-805',
-    vendor: 'Cisco',
-    vendor_name: 'Cisco',
-    item_sku: 'CIS-C9300',
-    expected_quantity: 2,
-    expected_eta: 'Mar 18, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Catalyst 9300 Switch', sku: 'CIS-C9300' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-18',
-    priceDelta: '$0.00',
-    qty: 2,
-    expectedQty: 2,
-    vendorText: 'Confirmed. Tracking number will be sent upon dispatch.',
-    emlFilename: 'Ack_PO-2024-805.eml'
-  },
-  {
-    id: 'ack-6',
-    poNumber: 'PO-2024-806',
-    vendor: 'Grainger',
-    vendor_name: 'Grainger',
-    item_sku: 'GR-SG-22',
-    expected_quantity: 100,
-    expected_eta: 'Mar 15, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Safety Goggles - Anti-Fog', sku: 'GR-SG-22' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-15',
-    priceDelta: '-$12.00',
-    qty: 100,
-    expectedQty: 100,
-    vendorText: 'Promotional discount applied to this bulk order.',
-    emlFilename: 'Ack_PO-2024-806.eml'
-  },
-  {
-    id: 'ack-7',
-    poNumber: 'PO-2024-807',
-    vendor: 'MSC Industrial',
-    vendor_name: 'MSC Industrial',
-    item_sku: 'MSC-EM-05',
-    expected_quantity: 45,
-    expected_eta: 'Mar 28, 12:00 PM',
-    ack_status: 'Delayed',
-    item: { name: 'Carbide End Mill Set', sku: 'MSC-EM-05' },
-    intent: 'Acknowledgement',
-    status: 'Delayed',
-    eta: '2024-03-28',
-    priceDelta: '$0.00',
-    qty: 45,
-    expectedQty: 45,
-    vendorText: 'Split shipment: 20 now, 25 next week due to stock levels.',
-    emlFilename: 'Ack_PO-2024-807.eml'
-  },
-  {
-    id: 'ack-8',
-    poNumber: 'PO-2024-808',
-    vendor: 'Amazon Business',
-    vendor_name: 'Amazon Business',
-    item_sku: 'AMZ-OC-09',
-    expected_quantity: 15,
-    expected_eta: 'Mar 14, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Ergonomic Office Chair', sku: 'AMZ-OC-09' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-14',
-    priceDelta: '$0.00',
-    qty: 15,
-    expectedQty: 15,
-    vendorText: 'Confirmed. Delivery expected within 2 business days.',
-    emlFilename: 'Ack_PO-2024-808.eml'
-  },
-  {
-    id: 'ack-9',
-    poNumber: 'PO-2024-809',
-    vendor: 'Staples Advantage',
-    vendor_name: 'Staples Advantage',
-    item_sku: 'STP-CP-10',
-    expected_quantity: 200,
-    expected_eta: 'Mar 16, 12:00 PM',
-    ack_status: 'Price Change',
-    item: { name: 'Copy Paper - 10 Ream Case', sku: 'STP-CP-10' },
-    intent: 'Acknowledgement',
-    status: 'Price Change',
-    eta: '2024-03-16',
-    priceDelta: '+$4.50',
-    qty: 200,
-    expectedQty: 200,
-    vendorText: 'Annual price adjustment for paper products.',
-    emlFilename: 'Ack_PO-2024-809.eml'
-  },
-  {
-    id: 'ack-10',
-    poNumber: 'PO-2024-810',
-    vendor: 'Thermo Fisher',
-    vendor_name: 'Thermo Fisher',
-    item_sku: 'TF-CT-50',
-    expected_quantity: 5000,
-    expected_eta: 'Mar 22, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Centrifuge Tubes 50mL', sku: 'TF-CT-50' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-22',
-    priceDelta: '$0.00',
-    qty: 5000,
-    expectedQty: 5000,
-    vendorText: 'Bulk order confirmed. Shipping via LTL freight.',
-    emlFilename: 'Ack_PO-2024-810.eml'
-  },
-  {
-    id: 'ack-11',
-    poNumber: 'PO-2024-811',
-    vendor: 'CDW-G',
-    vendor_name: 'CDW-G',
-    item_sku: 'CDW-TP-X1',
-    expected_quantity: 10,
-    expected_eta: 'Apr 10, 12:00 PM',
-    ack_status: 'Delayed',
-    item: { name: 'Lenovo ThinkPad X1 Carbon', sku: 'CDW-TP-X1' },
-    intent: 'Acknowledgement',
-    status: 'Delayed',
-    eta: '2024-04-10',
-    priceDelta: '$0.00',
-    qty: 10,
-    expectedQty: 10,
-    vendorText: 'Logistics delay at the port of entry.',
-    emlFilename: 'Ack_PO-2024-811.eml'
-  },
-  {
-    id: 'ack-12',
-    poNumber: 'PO-2024-812',
-    vendor: 'Graybar',
-    vendor_name: 'Graybar',
-    item_sku: 'GB-C6-1K',
-    expected_quantity: 8,
-    expected_eta: 'Mar 19, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Cat6 Ethernet Cable - 1000ft', sku: 'GB-C6-1K' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-19',
-    priceDelta: '$0.00',
-    qty: 8,
-    expectedQty: 8,
-    vendorText: 'Confirmed. Ready for pickup at local branch.',
-    emlFilename: 'Ack_PO-2024-812.eml'
-  },
-  {
-    id: 'ack-13',
-    poNumber: 'PO-2024-813',
-    vendor: 'McMaster-Carr',
-    vendor_name: 'McMaster-Carr',
-    item_sku: 'MC-OR-KIT',
-    expected_quantity: 25,
-    expected_eta: 'Mar 13, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'O-Ring Assortment Kit', sku: 'MC-OR-KIT' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-13',
-    priceDelta: '$0.00',
-    qty: 25,
-    expectedQty: 25,
-    vendorText: 'Confirmed. Shipping today via FedEx Overnight.',
-    emlFilename: 'Ack_PO-2024-813.eml'
-  },
-  {
-    id: 'ack-14',
-    poNumber: 'PO-2024-814',
-    vendor: 'W.W. Grainger',
-    vendor_name: 'W.W. Grainger',
-    item_sku: 'GR-AC-05',
-    expected_quantity: 3,
-    expected_eta: 'May 01, 12:00 PM',
-    ack_status: 'Backorder',
-    item: { name: 'Portable Air Compressor', sku: 'GR-AC-05' },
-    intent: 'Acknowledgement',
-    status: 'Backorder',
-    eta: '2024-05-01',
-    priceDelta: '$0.00',
-    qty: 0,
-    expectedQty: 3,
-    vendorText: 'Manufacturer lead time increased to 6 weeks.',
-    emlFilename: 'Ack_PO-2024-814.eml'
-  },
-  {
-    id: 'ack-15',
-    poNumber: 'PO-2024-815',
-    vendor: 'B&H Photo',
-    vendor_name: 'B&H Photo',
-    item_sku: 'BH-SN-A7',
-    expected_quantity: 2,
-    expected_eta: 'Mar 17, 12:00 PM',
-    ack_status: 'Confirmed',
-    item: { name: 'Sony Alpha a7 IV Camera', sku: 'BH-SN-A7' },
-    intent: 'Acknowledgement',
-    status: 'Confirmed',
-    eta: '2024-03-17',
-    priceDelta: '$0.00',
-    qty: 2,
-    expectedQty: 2,
-    vendorText: 'Confirmed. Signature required upon delivery.',
-    emlFilename: 'Ack_PO-2024-815.eml'
-  }
-];
 
 export const ReconciliationTable = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -386,14 +99,14 @@ export const ReconciliationTable = () => {
           intent: 'Acknowledgement',
           status: (item.ack_status as POStatus) || 'Confirmed',
           eta: formatDate(item.expected_eta),
-          priceDelta: item.freight_amount ? `$${Number(item.freight_amount).toFixed(2)}` : '$0.00',
+          priceDelta: `${Number(item.price_delta || 0) < 0 ? '-' : ''}$${Math.abs(Number(item.price_delta || 0)).toFixed(2)}`,
           qty: item.expected_quantity || 0,
           expectedQty: item.expected_quantity || 0,
-          vendorText: `Acknowledgement received for PO ${item.po_number}.`,
+          vendorText: item.ack_note || `No vendor acknowledgement received yet for PO ${item.po_number}.`,
           emlFilename: `Ack_${item.po_number}.eml`
         };
       });
-      setData(mappedData.length > 0 ? mappedData : MOCK_ACKNOWLEDGEMENTS);
+      setData(mappedData);
     } catch (err) {
       console.error('Failed to fetch Acknowledgement data:', err);
       toast.error('Failed to load acknowledgements');
@@ -532,8 +245,38 @@ export const ReconciliationTable = () => {
     );
   }
 
+  const ackStats = {
+    unresolved: data.filter(d => d.ack_status !== 'Confirmed').length,
+    price: data.filter(d => d.ack_status === 'Price Change').length,
+    backordered: data.filter(d => d.ack_status === 'Backorder').length,
+    confirmed: data.filter(d => d.ack_status === 'Confirmed').length,
+  };
+
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl"><AlertTriangle size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unresolved</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.unresolved} POs</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-warning/10 text-brand-warning rounded-xl"><DollarSign size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Price Alerts</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.price} Items</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl"><Package size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Backordered</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.backordered} POs</h4></div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl"><CheckCircle2 size={24} /></div>
+          <div><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Confirmed</p>
+          <h4 className="text-2xl font-bold text-white font-mono">{ackStats.confirmed} POs</h4></div>
+        </div>
+      </div>
+
       {/* Table Header Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">

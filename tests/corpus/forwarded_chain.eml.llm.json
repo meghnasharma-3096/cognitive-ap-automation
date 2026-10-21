@@ -1,0 +1,37 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "Starlight Log",
+  "sender_email": "billing@starlightlog.com",
+  "invoice_number": "INV-5003",
+  "invoice_date": "2026-10-05",
+  "po_number": "PO-2024-112",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "pcs",
+      "sku": null,
+      "quantity": 220,
+      "unit_price": 37.5,
+      "amount": 8250.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 8250.0,
+  "payment_terms": null,
+  "acknowledgement": null,
+  "summary": "Corrected Starlight invoice INV-5003 for $8,250 (the $8,000 figure was a superseded estimate).",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "Invoice INV-5003"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$8,250.00"
+    }
+  ]
+}

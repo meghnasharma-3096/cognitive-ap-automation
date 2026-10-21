@@ -19,19 +19,23 @@ import {
   Play,
   Download,
   X,
-  Info
+  Info,
+  Clock,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { supabase } from '../services/supabase';
-import { getAllData, runThreeWayMatchSimulation, updateDocumentStatus, createAuditLog, TABLES } from '../services/dbService';
-import { fetchPoByVendor, fetchPOReceipt, fetchVendorInvoice, executeThreeWayMatch } from '../services/AgenticService';
+import { TABLES } from '../services/dbService';
+import { fetchPoByVendor, fetchPOReceipt, fetchVendorInvoice } from '../services/AgenticService';
+import { runMatchApi, approveInvoiceApi } from '../services/matchApi';
 import { downloadCSV } from '../utils/helpers';
 
-type MatchStatus = 'Matched' | 'Variance' | 'Auto-Reconciled';
+type MatchStatus = 'Matched' | 'Variance' | 'Auto-Reconciled' | 'Pending';
 
 export const ThreeWayMatch = () => {
   const [matches, setMatches] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState<'attention' | 'newest' | 'amount'>('attention');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -77,12 +81,12 @@ export const ThreeWayMatch = () => {
     try {
       const { data: invoices, error } = await supabase
         .from(TABLES.vendorInvoices)
-        .select('*')
-        .or('match_status.eq.Exception,match_status.eq.Pending');
+        .select('*');
 
       if (error) throw error;
 
-      const combined = (invoices || []).map((inv, idx) => {
+      const rank: Record<string, number> = { Variance: 0, Pending: 1, Matched: 2 };
+      const combined = (invoices || []).map((inv: any, idx: number) => {
         return {
           id: inv.id?.toString() || `inv-${idx}`,
           invoice_number: inv.invoice_number || 'N/A',
@@ -91,10 +95,13 @@ export const ThreeWayMatch = () => {
           billed_amount: Number(inv.total_amount) || 0,
           billed_quantity: Number(inv.billed_quantity) || 0,
           freight_amount: Number(inv.freight_amount) || 0,
-          status: inv.match_status === 'Exception' ? 'Variance' : 'Matched',
+          status: inv.match_status === 'Exception' ? 'Variance' : inv.match_status === 'Success' ? 'Matched' : 'Pending',
+          reason: inv.notes || '',
+          varianceReason: inv.match_status === 'Exception' ? (inv.notes || '') : '',
+          checks: inv.match_checks || [],
           raw: inv
         };
-      });
+      }).sort((x: any, y: any) => rank[x.status] - rank[y.status]);
 
       setMatches(combined);
       if (combined.length > 0 && !selectedId) {
@@ -112,32 +119,18 @@ export const ThreeWayMatch = () => {
   }, []);
 
   const handleRunAnalysis = async () => {
-    if (!selectedMatch) return;
     setAnalyzing(true);
     try {
-      const result = await executeThreeWayMatch({
-        invoice_number: selectedMatch.invoice_number,
-        po_number: selectedMatch.po_number,
-        billed_quantity: selectedMatch.billed_quantity,
-        freight_amount: selectedMatch.freight_amount
-      });
-      
-      // Update match_status in database
-      const newStatus = result.success ? 'Matched' : 'Exception';
-      const { error } = await supabase
-        .from(TABLES.vendorInvoices)
-        .update({
-          match_status: newStatus,
-          notes: result.success ? 'Auto-reconciled via AI' : result.reason
-        })
-        .eq('invoice_number', selectedMatch.invoice_number);
-
-      if (error) throw error;
-      
-      if (result.success) {
-        toast.success(result.message || 'Match successful');
+      // Everything still pending, plus the invoice currently selected (re-check after data fixes).
+      const ids = matches.filter(m => m.status === 'Pending').map(m => m.id);
+      if (selectedMatch && !ids.includes(selectedMatch.id)) ids.push(selectedMatch.id);
+      const result = await runMatchApi({ invoiceIds: ids });
+      if (result.processed === 0) {
+        toast.info('Nothing to analyse.');
+      } else if (result.exceptions === 0) {
+        toast.success(`${result.success} invoice(s) matched.`);
       } else {
-        toast.warning(`Match failed: ${result.reason}`);
+        toast.warning(`${result.success} matched, ${result.exceptions} flagged for review.`);
       }
       await fetchData();
     } catch (err) {
@@ -153,30 +146,10 @@ export const ThreeWayMatch = () => {
     setIsApproving(true);
     const toastId = toast.loading(`Approving Invoice ${selectedMatch.invoice_number}...`);
     try {
-      const docs = await getAllData(TABLES.ingestedDocuments);
-      const doc = docs.find(d => d.invoice_number === selectedMatch.invoice_number);
-      
-      if (doc) {
-        const previousStatus = doc.status;
-        const result = await updateDocumentStatus(doc.id, 'Resolved');
-        if (result) {
-          // Create Audit Log
-          await createAuditLog({
-            action_type: 'Manual Approval',
-            document_id: selectedMatch.invoice_number,
-            previous_status: previousStatus,
-            new_status: 'Resolved'
-          });
-
-          toast.success(`Invoice ${selectedMatch.invoice_number} manually approved.`, { id: toastId });
-          setIsVisualizerOpen(false);
-          fetchData();
-        } else {
-          throw new Error('Update failed');
-        }
-      } else {
-        toast.error('Could not find source document to approve.', { id: toastId });
-      }
+      const r = await approveInvoiceApi(selectedMatch.id);
+      toast.success(r.message, { id: toastId });
+      setIsVisualizerOpen(false);
+      await fetchData();
     } catch (err) {
       console.error(err);
       toast.error('Failed to approve invoice.', { id: toastId });
@@ -184,6 +157,16 @@ export const ThreeWayMatch = () => {
       setIsApproving(false);
     }
   };
+
+  const sortedMatches = React.useMemo(() => {
+    const rank: Record<string, number> = { Variance: 0, Pending: 1, Matched: 2 };
+    const t = (m: any) => Date.parse(m.raw?.created_at ?? m.raw?.invoice_date ?? '') || 0;
+    const list = [...matches];
+    if (sortBy === 'newest') list.sort((a, b) => t(b) - t(a));
+    else if (sortBy === 'amount') list.sort((a, b) => b.billed_amount - a.billed_amount);
+    else list.sort((a, b) => rank[a.status] - rank[b.status]);
+    return list;
+  }, [matches, sortBy]);
 
   const selectedMatch = matches.find(m => m.id === selectedId) || matches[0];
 
@@ -200,7 +183,7 @@ export const ThreeWayMatch = () => {
           const [po, receipt, invoice] = await Promise.all([
             poNum !== 'N/A' ? fetchPoByVendor(poNum) : Promise.resolve(null),
             poNum !== 'N/A' ? fetchPOReceipt(poNum) : Promise.resolve(null),
-            invNum !== 'N/A' ? fetchVendorInvoice(invNum) : Promise.resolve(null)
+            Promise.resolve(selectedMatch.raw ?? null) // the exact row (invoice numbers can legitimately repeat: duplicates)
           ]);
           
           setDetailedData({ po, receipt, invoice });
@@ -237,8 +220,53 @@ export const ThreeWayMatch = () => {
     );
   }
 
+  if (!selectedMatch) {
+    return (
+      <div className="glass-card p-12 text-center space-y-2">
+        <p className="text-white font-bold">No invoices to reconcile</p>
+        <p className="text-slate-500 text-sm">Upload a vendor document from Overview, or reset the sample data.</p>
+      </div>
+    );
+  }
+
+  const stats = {
+    total: matches.length,
+    matched: matches.filter(m => m.status === 'Matched').length,
+    exceptions: matches.filter(m => m.status === 'Variance').length,
+    pending: matches.filter(m => m.status === 'Pending').length,
+  };
+
   return (
     <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-accent/10 text-brand-accent rounded-xl"><Layers size={24} /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Invoices</p>
+            <h4 className="text-2xl font-bold text-white font-mono">{stats.total}</h4>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">{stats.pending} awaiting analysis</p>
+          </div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-success/10 text-brand-success rounded-xl"><Zap size={24} /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Matched</p>
+            <h4 className="text-2xl font-bold text-white font-mono">{stats.matched}</h4>
+            <p className="text-[10px] text-brand-success font-bold mt-1">
+              {stats.total - stats.pending > 0 ? `${Math.round((stats.matched / (stats.total - stats.pending)) * 100)}% of analysed` : 'Run analysis to match'}
+            </p>
+          </div>
+        </div>
+        <div className="glass-card p-6 flex items-center gap-4">
+          <div className="p-3 bg-brand-danger/10 text-brand-danger rounded-xl"><AlertCircle size={24} /></div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Exceptions</p>
+            <h4 className="text-2xl font-bold text-white font-mono">{stats.exceptions}</h4>
+            <p className="text-[10px] text-brand-warning font-bold mt-1">Need review</p>
+          </div>
+        </div>
+      </div>
+
       {/* List of Match Sets */}
       <div className="glass-card overflow-hidden">
         <div className="p-4 border-b border-brand-border bg-slate-900/30 flex items-center justify-between">
@@ -261,15 +289,21 @@ export const ThreeWayMatch = () => {
               <Download size={12} /> Export Report
             </button>
             <span className="text-[10px] font-bold text-slate-500 uppercase ml-2">Sort by:</span>
-            <select className="bg-transparent text-[10px] font-bold text-brand-accent uppercase focus:outline-none cursor-pointer">
-              <option>Newest First</option>
-              <option>Variance High to Low</option>
+            <select
+              data-testid="match-sort"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'attention' | 'newest' | 'amount')}
+              className="bg-transparent text-[10px] font-bold text-brand-accent uppercase focus:outline-none cursor-pointer"
+            >
+              <option value="attention" className="bg-slate-900">Needs Attention First</option>
+              <option value="newest" className="bg-slate-900">Newest First</option>
+              <option value="amount" className="bg-slate-900">Amount High to Low</option>
             </select>
           </div>
         </div>
         <div className="divide-y divide-brand-border max-h-64 overflow-y-auto">
           {matches.length > 0 ? (
-            matches.map((match) => (
+            sortedMatches.map((match) => (
               <button
                 key={match.id}
                 onClick={() => setSelectedId(match.id)}
@@ -281,10 +315,12 @@ export const ThreeWayMatch = () => {
                   <div className={`p-2 rounded-lg ${
                     match.status === 'Matched' ? 'bg-brand-success/10 text-brand-success' :
                     match.status === 'Auto-Reconciled' ? 'bg-brand-accent/10 text-brand-accent' :
+                    match.status === 'Pending' ? 'bg-slate-700/40 text-slate-300' :
                     'bg-brand-danger/10 text-brand-danger'
                   }`}>
                     {match.status === 'Matched' ? <CheckCircle2 size={18} /> : 
                      match.status === 'Auto-Reconciled' ? <ShieldCheck size={18} /> : 
+                     match.status === 'Pending' ? <Clock size={18} /> : 
                      <AlertCircle size={18} />}
                   </div>
                   <div>
@@ -292,6 +328,9 @@ export const ThreeWayMatch = () => {
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
                       {match.invoice_number} • {match.vendor_name}
                     </p>
+                    {match.status === 'Variance' && match.reason && (
+                      <p className="text-[11px] text-brand-danger mt-1 max-w-xl truncate" title={match.reason}>{match.reason}</p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -299,6 +338,7 @@ export const ThreeWayMatch = () => {
                   <span className={`status-badge ${
                     match.status === 'Matched' ? 'bg-brand-success/10 text-brand-success' :
                     match.status === 'Auto-Reconciled' ? 'bg-brand-accent/10 text-brand-accent' :
+                    match.status === 'Pending' ? 'bg-slate-700/40 text-slate-300' :
                     'bg-brand-danger/10 text-brand-danger'
                   }`}>
                     {match.status}
@@ -347,8 +387,30 @@ export const ThreeWayMatch = () => {
                 <span className="text-xs font-bold uppercase tracking-wider">Auto-Reconciled</span>
               </div>
             )}
+            {selectedMatch.status === 'Pending' && (
+              <div className="flex items-center gap-2 text-slate-300 bg-slate-700/40 px-3 py-1.5 rounded-lg border border-brand-border">
+                <Clock size={16} />
+                <span className="text-xs font-bold uppercase tracking-wider">Awaiting analysis</span>
+              </div>
+            )}
           </div>
         </div>
+
+        {selectedMatch.checks && selectedMatch.checks.length > 0 && (
+          <div className="glass-card p-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Match checks</p>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+              {selectedMatch.checks.map((c: any) => (
+                <li key={c.code} className="flex items-start gap-2 text-xs">
+                  <span className={`mt-0.5 font-bold ${c.status === 'pass' ? 'text-brand-success' : c.status === 'fail' ? 'text-brand-danger' : 'text-slate-500'}`}>
+                    {c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '–'}
+                  </span>
+                  <span className="text-slate-300"><span className="font-semibold text-white">{c.label}:</span> {c.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* PO Card */}
@@ -378,7 +440,7 @@ export const ThreeWayMatch = () => {
               <div className="flex justify-between items-center py-2 border-b border-brand-border">
                 <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Unit Price</span>
                 <span className="text-sm font-mono text-white">
-                  ${formatCurrency(detailedData?.po?.expected_price || 0)}
+                  ${formatCurrency(detailedData?.po?.unit_price || 0)}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2">
@@ -404,7 +466,7 @@ export const ThreeWayMatch = () => {
                 </div>
                 <h4 className="text-sm font-bold text-white uppercase tracking-wider">Warehouse Receipt</h4>
               </div>
-              <span className="text-xs font-mono text-slate-500">{detailedData?.receipt?.receipt_number || 'N/A'}</span>
+              <span className="text-xs font-mono text-slate-500">{detailedData?.receipt?.receipt_number || detailedData?.receipt?.id || 'N/A'}</span>
             </div>
             
             <div className="space-y-4">
@@ -443,6 +505,7 @@ export const ThreeWayMatch = () => {
             className={`glass-card p-6 space-y-6 border-t-4 ${
               selectedMatch.status === 'Matched' ? 'border-brand-success' :
               selectedMatch.status === 'Auto-Reconciled' ? 'border-brand-accent' :
+              selectedMatch.status === 'Pending' ? 'border-slate-600' :
               'border-brand-danger'
             }`}
           >
@@ -459,17 +522,20 @@ export const ThreeWayMatch = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b border-brand-border">
                 <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Qty Billed</span>
-                <span className={`text-sm font-mono font-bold ${
-                  (detailedData?.invoice?.billed_quantity || 0) !== (detailedData?.receipt?.received_quantity || 0) 
-                    ? 'text-brand-danger' : 'text-brand-success'
-                }`}>
-                  {detailedData?.invoice?.billed_quantity || 0} units
-                </span>
+                {detailedData?.invoice?.billed_quantity == null ? (
+                  <span className="text-sm font-mono text-slate-400">not stated</span>
+                ) : (
+                  <span className={`text-sm font-mono font-bold ${
+                    detailedData.invoice.billed_quantity !== (detailedData?.receipt?.received_quantity || 0) ? 'text-brand-danger' : 'text-brand-success'
+                  }`}>
+                    {detailedData.invoice.billed_quantity} units
+                  </span>
+                )}
               </div>
               <div className="flex justify-between items-center py-2 border-b border-brand-border">
                 <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Unit Price</span>
                 <span className="text-sm font-mono text-white">
-                  ${formatCurrency(detailedData?.invoice?.billed_unit_price || 0)}
+                  {detailedData?.invoice?.unit_price == null ? <span className="text-slate-400">not stated</span> : `$${formatCurrency(detailedData.invoice.unit_price)}`}
                 </span>
               </div>
               <div className={`flex justify-between items-center py-2 px-2 -mx-2 rounded transition-colors ${
@@ -507,25 +573,45 @@ export const ThreeWayMatch = () => {
               </div>
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Patterns</h4>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Freight Variance Auto-Approvals</span>
-                  <span className="text-white font-bold">28% of total</span>
-                </div>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-accent w-[28%]" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Unit Price Matching Accuracy</span>
-                  <span className="text-white font-bold">92.4%</span>
-                </div>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-success w-[92.4%]" />
-                </div>
-              </div>
+            <div className="space-y-4" data-testid="resolution-patterns">
+              {(() => {
+                const analysed = matches.filter(m => m.status !== 'Pending');
+                const matched = analysed.filter(m => m.status === 'Matched').length;
+                const exceptions = analysed.filter(m => m.status === 'Variance');
+                const LABEL: Record<string, string> = {
+                  DUPLICATE: 'Duplicate invoice', FREIGHT: 'Unapproved freight', PRICE: 'Price variance', QTY_VS_RECEIPT: 'Billed > received',
+                  QTY_VS_PO: 'Billed > ordered', VENDOR_MISMATCH: 'Vendor mismatch', PO_MISSING: 'PO not found', RECEIPT_MISSING: 'No goods receipt', TOTAL_MISSING: 'Total missing',
+                };
+                const byCause: Record<string, number> = {};
+                exceptions.forEach(m => { const c = LABEL[m.raw?.match_code] ?? 'Other'; byCause[c] = (byCause[c] || 0) + 1; });
+                const rows = Object.entries(byCause).sort((a, b) => b[1] - a[1]);
+                if (analysed.length === 0) return <p className="text-xs text-slate-500">Run the analysis to see how invoices resolve.</p>;
+                const pct = Math.round((matched / analysed.length) * 1000) / 10;
+                return (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">Auto-match rate</span>
+                        <span className="text-white font-bold">{pct}% ({matched} of {analysed.length})</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-success" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    {rows.map(([label, n]) => (
+                      <div key={label} className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">{label}</span>
+                          <span className="text-white font-bold">{n} of {exceptions.length} exceptions</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-brand-danger" style={{ width: `${(n / exceptions.length) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -545,9 +631,9 @@ export const ThreeWayMatch = () => {
               <div className="px-6 py-4 border-b border-brand-border flex items-center justify-between bg-slate-900/50">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    selectedMatch.status === 'Variance' ? 'bg-brand-danger/20 text-brand-danger' : 'bg-brand-success/20 text-brand-success'
+                    selectedMatch.status === 'Variance' ? 'bg-brand-danger/20 text-brand-danger' : selectedMatch.status === 'Pending' ? 'bg-slate-700/40 text-slate-300' : 'bg-brand-success/20 text-brand-success'
                   }`}>
-                    {selectedMatch.status === 'Variance' ? <AlertCircle size={24} /> : <CheckCircle2 size={24} />}
+                    {selectedMatch.status === 'Variance' ? <AlertCircle size={24} /> : selectedMatch.status === 'Pending' ? <Clock size={24} /> : <CheckCircle2 size={24} />}
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-white">
@@ -581,7 +667,7 @@ export const ThreeWayMatch = () => {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-slate-500">Unit Price</span>
-                        <span className="text-sm font-mono text-white">${formatCurrency(detailedData?.po?.expected_price || 0)}</span>
+                        <span className="text-sm font-mono text-white">${formatCurrency(detailedData?.po?.unit_price || 0)}</span>
                       </div>
                       <div className="pt-4 border-t border-brand-border flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-400">Total Amount</span>
@@ -635,7 +721,7 @@ export const ThreeWayMatch = () => {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-slate-500">Unit Price</span>
-                        <span className="text-sm font-mono text-white">${formatCurrency(detailedData?.invoice?.billed_unit_price || 0)}</span>
+                        <span className="text-sm font-mono text-white">${formatCurrency(detailedData?.invoice?.unit_price || 0)}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-slate-500">Freight Variance</span>

@@ -7,3 +7,9 @@ coverage/
 .env*
 !.env.example
 .claude/
+
+# runtime data (live copy; seed.json is the golden source)
+data/db.json
+data/db.json.tmp
+data/inbox/
+.vitest/

@@ -1,0 +1,9 @@
+{
+  "type": "invoice",
+  "invoice_number": "INV-88392",
+  "po": "PO-4017",
+  "total": 1953.94,
+  "freight": 45.0,
+  "match": "Exception",
+  "code": "FREIGHT"
+}

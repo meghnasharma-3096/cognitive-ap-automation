@@ -1,0 +1,8 @@
+{
+  "type": "invoice",
+  "invoice_number": "INV-5007",
+  "po": "PO-2024-100",
+  "total": 5610.0,
+  "warning": "Multiple PO",
+  "status": "Needs Review"
+}

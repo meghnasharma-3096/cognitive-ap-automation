@@ -1,0 +1,4 @@
+From: ar@globaltech-supply.com
+Subject: Combined invoice INV-5007
+
+Invoice INV-5007 covers PO-2024-100 (100 units) and PO-2024-102 (120 units). Total amount due is $5,610.00.

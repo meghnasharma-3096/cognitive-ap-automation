@@ -1,0 +1,41 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "Global Tech",
+  "sender_email": "ar@globaltech-supply.com",
+  "invoice_number": "INV-5001",
+  "invoice_date": "2026-10-05",
+  "po_number": "PO-2024-110",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "industrial sensor kit",
+      "sku": null,
+      "quantity": 200,
+      "unit_price": 35.5,
+      "amount": 7100.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 7100.0,
+  "payment_terms": "Net 45",
+  "acknowledgement": null,
+  "summary": "Invoice INV-5001, 200 x $35.50 = $7,100 against PO-2024-110.",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "invoice INV-5001"
+    },
+    {
+      "field": "po_number",
+      "quote": "PO-2024-110"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$7,100.00"
+    }
+  ]
+}

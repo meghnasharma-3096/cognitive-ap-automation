@@ -1,0 +1,31 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "EFGHI Company",
+  "sender_email": "billing@efghi.com",
+  "invoice_number": "INV-88392",
+  "invoice_date": "2026-03-13",
+  "po_number": "PO-4019",
+  "other_po_numbers": [
+    "PO-4017"
+  ],
+  "currency": "USD",
+  "line_items": [],
+  "subtotal": null,
+  "freight_amount": 45.0,
+  "tax_amount": null,
+  "total_amount": 1953.94,
+  "payment_terms": "Net 30",
+  "acknowledgement": null,
+  "summary": "Invoice INV-88392 against PO-4019 (subject line says PO-4017; body says PO-4019).",
+  "evidence": [
+    {
+      "field": "po_number",
+      "quote": "under PO-4019"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$1,953.94"
+    }
+  ]
+}

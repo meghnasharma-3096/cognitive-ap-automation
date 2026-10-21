@@ -1,0 +1,37 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.9,
+  "vendor_name": "Apex Mfg",
+  "sender_email": null,
+  "invoice_number": "INV-5002",
+  "invoice_date": null,
+  "po_number": "PO-2024-106",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "unspecified",
+      "sku": null,
+      "quantity": 160,
+      "unit_price": 31.5,
+      "amount": 5040.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 5040.0,
+  "payment_terms": null,
+  "acknowledgement": null,
+  "summary": "Jotted invoice INV-5002 from Apex Mfg: 160 x $31.50 = $5,040.",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "INV-5002"
+    },
+    {
+      "field": "total_amount",
+      "quote": "total 5040"
+    }
+  ]
+}

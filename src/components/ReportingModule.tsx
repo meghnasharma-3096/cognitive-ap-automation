@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
-import { getAllData, runThreeWayMatchSimulation, TABLES } from '../services/dbService';
+import { getAllData, TABLES } from '../services/dbService';
 import { downloadCSV } from '../utils/helpers';
 import { Modal } from './Modal';
 import { AuditLogTable } from './AuditLogTable';
@@ -62,9 +62,6 @@ export const ReportingModule = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Run simulation to ensure we have latest results
-      await runThreeWayMatchSimulation();
-      
       const success = await getAllData(TABLES.successReports);
       const exceptions = await getAllData(TABLES.exceptionReports);
       

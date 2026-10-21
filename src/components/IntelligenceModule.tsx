@@ -14,13 +14,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
-import { getAllData, updateData, DocumentCluster, createAuditLog, TABLES } from '../services/dbService';
+import { getClusters, resolveClusterApi, LiveCluster } from '../services/clusterApi';
 import { Modal } from './Modal';
 
 export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<void> }) => {
-  const [clusters, setClusters] = useState<DocumentCluster[]>([]);
+  const [clusters, setClusters] = useState<LiveCluster[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCluster, setSelectedCluster] = useState<DocumentCluster | null>(null);
+  const [selectedCluster, setSelectedCluster] = useState<LiveCluster | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
@@ -28,9 +28,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
   const fetchClusters = async () => {
     setLoading(true);
     try {
-      const data = await getAllData(TABLES.documentClusters);
-      // Filter for 'Requires Review' as per prompt logic "remove the resolved item"
-      setClusters(data.filter(c => c.status === 'Requires Review'));
+      setClusters(await getClusters());
     } catch (err) {
       console.error('Failed to fetch clusters:', err);
       toast.error('Failed to load intelligence data');
@@ -43,31 +41,19 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
     fetchClusters();
   }, []);
 
-  const handleResolve = async (status: 'Resolved') => {
+  const handleResolve = async (action: 'approve' | 'reject') => {
     if (!selectedCluster) return;
-    
     setIsResolving(true);
     try {
-      const previousStatus = selectedCluster.status;
-      await updateData(TABLES.documentClusters, selectedCluster.id, { status });
-      
-      // Create Audit Log
-      await createAuditLog({
-        action_type: 'Bulk Resolution',
-        document_id: selectedCluster.cluster_name,
-        previous_status: previousStatus,
-        new_status: status
-      });
-
-      toast.success(`Successfully resolved ${selectedCluster.document_count} documents`);
+      const r = await resolveClusterApi(selectedCluster.id, action);
+      toast.success(`${action === 'approve' ? 'Approved' : 'Routed to vendor'}: ${r.count} document(s)`);
       setSelectedCluster(null);
+      setCurrentPage(1);
       await fetchClusters();
-      if (onRefresh) {
-        await onRefresh();
-      }
+      if (onRefresh) await onRefresh();
     } catch (err) {
       console.error('Resolution failed:', err);
-      toast.error('Failed to resolve cluster');
+      toast.error(err instanceof Error ? err.message : 'Failed to resolve cluster');
     } finally {
       setIsResolving(false);
     }
@@ -97,7 +83,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
           <div className="px-4 py-2 bg-slate-800/50 border border-brand-border rounded-lg flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-brand-success rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Model: GPT-4o-Cognitive</span>
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Computed from live match results</span>
             </div>
           </div>
         </div>
@@ -129,8 +115,8 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
             <ShieldCheck size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Auto-Resolved</p>
-            <h4 className="text-2xl font-bold text-white font-mono">1,429</h4>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Documents Affected</p>
+            <h4 className="text-2xl font-bold text-white font-mono">{clusters.reduce((n, c) => n + c.document_count, 0)}</h4>
           </div>
         </div>
       </div>
@@ -142,7 +128,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
             Anomaly Clusters
           </h2>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            Last Scan: Just Now
+            Recomputed on every visit
           </span>
         </div>
 
@@ -191,7 +177,7 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
           {clusters.length === 0 && !loading && (
             <div className="py-20 flex flex-col items-center justify-center glass-card border-dashed">
               <CheckCircle2 size={48} className="text-brand-success opacity-20 mb-4" />
-              <p className="text-slate-500 font-medium">All clusters have been resolved.</p>
+              <p className="text-slate-500 font-medium">No open anomalies. Run Batch Processing or ingest documents to populate this page.</p>
             </div>
           )}
         </div>
@@ -205,7 +191,8 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
         footer={
           <div className="flex items-center gap-4 w-full">
             <button 
-              onClick={() => handleResolve('Resolved')}
+              onClick={() => handleResolve('approve')}
+              data-testid="cluster-approve"
               disabled={isResolving}
               className="flex-1 py-3 bg-brand-success hover:bg-brand-success/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-brand-success/20 flex items-center justify-center gap-2 disabled:opacity-50"
             >
@@ -213,7 +200,8 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
               Approve & Process All
             </button>
             <button 
-              onClick={() => handleResolve('Resolved')}
+              onClick={() => handleResolve('reject')}
+              data-testid="cluster-reject"
               disabled={isResolving}
               className="flex-1 py-3 bg-brand-danger hover:bg-brand-danger/90 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-brand-danger/20 flex items-center justify-center gap-2 disabled:opacity-50"
             >
@@ -248,16 +236,16 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
                 <p className="text-xl font-bold text-white">{selectedCluster.document_count} Files</p>
               </div>
               <div className="p-4 bg-slate-900/50 border border-brand-border rounded-xl">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">AI Confidence</p>
-                <p className="text-xl font-bold text-brand-success">98.4%</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg Extraction Confidence</p>
+                <p className="text-xl font-bold text-brand-success">{selectedCluster.confidence != null ? `${selectedCluster.confidence}%` : 'n/a (seeded records)'}</p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Analysis Summary</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">What this group is</p>
               <div className="p-4 bg-slate-900/30 border border-brand-border rounded-xl">
-                <p className="text-sm text-slate-300 leading-relaxed italic">
-                  "The cognitive engine has identified a recurring pattern regarding {selectedCluster.cluster_name}. Resolving this will update ERP records for the affected documents and prevent downstream STP failures."
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {selectedCluster.description} Approving pays every invoice listed below; rejecting routes them back to the vendor. Both are recorded in the audit trail.
                 </p>
               </div>
             </div>
@@ -279,25 +267,20 @@ export const IntelligenceModule = ({ onRefresh }: { onRefresh?: () => Promise<vo
                 </div>
               </div>
               <div className="space-y-2">
-                {Array.from({ length: selectedCluster.document_count }).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((_, i) => {
-                  const docIndex = (currentPage - 1) * itemsPerPage + i + 1;
-                  return (
-                    <div key={docIndex} className="flex items-center justify-between p-3 bg-slate-900/20 border border-brand-border/50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-slate-500">
-                          <Zap size={14} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-white">DOC-2024-{String(docIndex).padStart(4, '0')}</p>
-                          <p className="text-[10px] text-slate-500">
-                            {['Uline', 'Global Freight', 'Dell', 'Fastenal', 'Cisco'][docIndex % 5]} • ${(420 + docIndex * 15).toFixed(2)}
-                          </p>
-                        </div>
+                {selectedCluster.docs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((d) => (
+                  <div key={d.id} data-testid="cluster-doc" className="flex items-center justify-between p-3 bg-slate-900/20 border border-brand-border/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-slate-500">
+                        <Zap size={14} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-white">{d.invoice_number}</p>
+                        <p className="text-[10px] text-slate-500">{d.vendor} • ${d.amount.toFixed(2)}{d.detail ? ` • ${d.detail}` : ''}</p>
                       </div>
                     </div>
-                  );
-                })}
-                
+                  </div>
+                ))}
+
                 {selectedCluster.document_count > itemsPerPage && (
                   <div className="flex items-center justify-between pt-4">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">

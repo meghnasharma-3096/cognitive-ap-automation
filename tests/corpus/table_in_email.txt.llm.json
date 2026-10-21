@@ -1,0 +1,37 @@
+{
+  "document_type": "invoice",
+  "confidence": 0.95,
+  "vendor_name": "Global Tech",
+  "sender_email": "accounts@globaltech-supply.com",
+  "invoice_number": "INV-5006",
+  "invoice_date": null,
+  "po_number": "PO-2024-105",
+  "other_po_numbers": [],
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "unspecified",
+      "sku": null,
+      "quantity": 150,
+      "unit_price": 30.5,
+      "amount": 4575.0
+    }
+  ],
+  "subtotal": null,
+  "freight_amount": 0.0,
+  "tax_amount": null,
+  "total_amount": 4575.0,
+  "payment_terms": null,
+  "acknowledgement": null,
+  "summary": "Invoice INV-5006 in table form, $4,575.00.",
+  "evidence": [
+    {
+      "field": "invoice_number",
+      "quote": "Invoice INV-5006"
+    },
+    {
+      "field": "total_amount",
+      "quote": "$4,575.00"
+    }
+  ]
+}

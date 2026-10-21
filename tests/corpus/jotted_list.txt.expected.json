@@ -1,0 +1,9 @@
+{
+  "type": "invoice",
+  "invoice_number": "INV-5002",
+  "po": "PO-2024-106",
+  "total": 5040.0,
+  "freight": 0.0,
+  "match": "Success",
+  "rules_ok": false
+}
