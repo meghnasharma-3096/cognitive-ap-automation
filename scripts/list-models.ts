@@ -10,4 +10,4 @@ for await (const m of await ai.models.list()) {
   if ((m.supportedActions ?? []).includes('generateContent') && /gemini/i.test(m.name ?? '')) names.push((m.name ?? '').replace('models/', ''));
 }
 console.log(names.sort().join('\n'));
-console.log('\nPut your choice in .env, e.g.:  GEMINI_MODEL=' + ('gemini-3.8-flash,gemini-flash-latest'));
+console.log('\nPut your choice in .env, e.g.:  GEMINI_MODEL=' + ('gemini-3.8-flash,gemini-flash-latest,gemini-3.1-pro-preview'));

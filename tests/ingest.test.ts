@@ -154,6 +154,15 @@ describe('business rules at the door', () => {
     expect(a.warnings).toHaveLength(0);
   });
 
+  it('images are re-encoded to a compact JPEG before going to the model', async () => {
+    const { prepareDocument } = await import('../server/documents');
+    const prep = await prepareDocument(raw('scanned_invoice.png'));
+    const att = prep.input.attachments[0];
+    expect(att.mimeType).toBe('image/jpeg');
+    expect(Buffer.from(att.dataBase64, 'base64').length).toBeLessThan(fs.statSync(path.join(CORPUS, 'scanned_invoice.png')).size);
+    expect(prep.notes.join(' ')).toMatch(/optimised/);
+  });
+
   it('unsupported file type is rejected cleanly', async () => {
     const r = await ingestDocument(store, { filename: 'x.zip', dataBase64: Buffer.from('PK').toString('base64') }, { provider: fixture });
     expect(r.ok).toBe(false);

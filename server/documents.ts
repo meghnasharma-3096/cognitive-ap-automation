@@ -3,6 +3,7 @@
  * extraction providers consume: text the model can read + raw attachments it can see.
  */
 import { simpleParser } from 'mailparser';
+import { Jimp } from 'jimp';
 import { extractText, getDocumentProxy } from 'unpdf';
 import type { Attachment, ExtractInput } from './extraction/providers';
 
@@ -34,6 +35,24 @@ const guessMime = (name: string, given?: string): string => {
     gif: 'image/gif', eml: 'message/rfc822', txt: 'text/plain', md: 'text/plain', csv: 'text/csv',
   } as Record<string, string>)[e] ?? 'application/octet-stream';
 };
+
+/**
+ * Re-encode photos/scans as a clean, resized JPEG on white. Huge or noisy lossless images make the model slow
+ * (we saw 504 timeouts); a 1800px JPEG is plenty to read an invoice. Falls back to the original if it can't decode.
+ */
+export async function normalizeImage(buf: Buffer, mime: string): Promise<{ mimeType: string; dataBase64: string; note?: string }> {
+  try {
+    const src = await Jimp.read(buf);
+    const longest = Math.max(src.width, src.height);
+    if (longest > 1800) src.scaleToFit({ w: 1800, h: 1800 });
+    const flat = new Jimp({ width: src.width, height: src.height, color: 0xffffffff });
+    flat.composite(src, 0, 0);
+    const out = await flat.getBuffer('image/jpeg', { quality: 88 });
+    return { mimeType: 'image/jpeg', dataBase64: out.toString('base64'), note: `Image optimised for reading (${Math.round(buf.length / 1024)} KB → ${Math.round(out.length / 1024)} KB)` };
+  } catch {
+    return { mimeType: mime, dataBase64: buf.toString('base64') };
+  }
+}
 
 export async function pdfToText(buf: Uint8Array): Promise<string> {
   try {
@@ -70,8 +89,9 @@ export async function prepareDocument(doc: RawDocument): Promise<PreparedDocumen
 
   if (IMAGE_MIME.test(mime)) {
     notes.push('Image input: values cannot be verified against a text layer');
+    const img = await normalizeImage(buf, mime);
     return {
-      input: { filename: doc.filename, text: '', attachments: [{ mimeType: mime, dataBase64: doc.dataBase64, filename: doc.filename }] },
+      input: { filename: doc.filename, text: '', attachments: [{ mimeType: img.mimeType, dataBase64: img.dataBase64, filename: doc.filename }] },
       sourceText: '', kind: 'image', notes,
     };
   }
@@ -95,7 +115,8 @@ export async function prepareDocument(doc: RawDocument): Promise<PreparedDocumen
         attachments.push({ mimeType: am, dataBase64: b64, filename: a.filename });
         notes.push(`Attached PDF ${a.filename ?? ''} included`);
       } else if (IMAGE_MIME.test(am)) {
-        attachments.push({ mimeType: am, dataBase64: b64, filename: a.filename });
+        const img = await normalizeImage(a.content, am);
+        attachments.push({ mimeType: img.mimeType, dataBase64: img.dataBase64, filename: a.filename });
         notes.push(`Attached image ${a.filename ?? ''} included`);
       }
     }

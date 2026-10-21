@@ -40,7 +40,7 @@ export class GeminiProvider implements Provider {
   /** Extraction needs little reasoning; low thinking is far faster. GEMINI_THINKING=low|minimal|medium|high|off */
   private thinking: string = (process.env.GEMINI_THINKING ?? 'low').toLowerCase();
 
-  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest')) {
+  constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest,gemini-3.1-pro-preview')) {
     this.ai = new GoogleGenAI({ apiKey });
     this.models = models.split(',').map(m => m.trim()).filter(Boolean);
   }

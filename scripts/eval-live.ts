@@ -26,7 +26,7 @@ const files = fs.readdirSync(corpus).filter(f => !f.endsWith('.expected.json') &
 let bad = 0;
 
 async function main() {
-  console.log(`Model(s): ${process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest'}${record ? '   (recording fixtures)' : ''}\n`);
+  console.log(`Model(s): ${process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest,gemini-3.1-pro-preview'}${record ? '   (recording fixtures)' : ''}\n`);
   for (const f of files) {
     const exp = JSON.parse(fs.readFileSync(path.join(corpus, f + '.expected.json'), 'utf8'));
     const store = new JsonStore(path.join(os.tmpdir(), `eval-${process.pid}-${Math.random()}.json`), path.join(root, 'data', 'seed.json'));
