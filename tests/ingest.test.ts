@@ -163,6 +163,14 @@ describe('business rules at the door', () => {
     expect(prep.notes.join(' ')).toMatch(/optimised/);
   });
 
+  it('Gemini daily quota: one clear sentence, never auto-posted', async () => {
+    const quota: Provider = { name: 'gemini', extract: async () => { throw new Error('Gemini daily request limit reached for this API key (free tier allows ~20 requests/day per model).'); } };
+    const r = await ingestDocument(store, raw('scanned_invoice.png'), { provider: quota });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe('Needs Review');
+    expect(r.error).toMatch(/daily request limit/);
+  });
+
   it('unsupported file type is rejected cleanly', async () => {
     const r = await ingestDocument(store, { filename: 'x.zip', dataBase64: Buffer.from('PK').toString('base64') }, { provider: fixture });
     expect(r.ok).toBe(false);

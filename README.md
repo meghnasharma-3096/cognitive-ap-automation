@@ -28,6 +28,10 @@ No database to set up. Data lives in `data/db.json` (created from `data/seed.jso
 
 Every path runs the same pipeline: one Gemini call classifies **and** extracts (no layout templates), a deterministic audit checks the answer against the source (arithmetic, values present in the text, multiple POs), then the invoice is matched. Low-confidence reads, LLM outages and unreadable files go to **Needs Review**, never auto-posted.
 
+## Gemini quota
+
+A free-tier key allows only ~20 requests/day per model (the app then says so plainly). Turn on billing for the key in Google AI Studio for demos. See `DEMO.md` for a 5-minute walkthrough.
+
 ## Without a Gemini key
 
 The app falls back to a text-only offline parser (clearly labelled in the UI). It cannot read scans or images. `LLM_PROVIDER=fixture` replays the recorded answers in `tests/corpus/*.llm.json` (used by tests and offline demos).

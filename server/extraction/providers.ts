@@ -73,6 +73,8 @@ export class GeminiProvider implements Provider {
           if (this.thinking !== 'off' && /thinking/i.test(msg) && /INVALID_ARGUMENT|400|not supported/i.test(msg)) { this.thinking = 'off'; attempt--; continue; }
           if (/api key|permission|401|403|PERMISSION_DENIED|UNAUTHENTICATED/i.test(msg) && !/not found/i.test(msg)) throw e;
           // Overloaded / rate limited: wait and retry the same model.
+          const dailyQuota = /PerDay|per day|free_tier_requests/i.test(msg) && /429|RESOURCE_EXHAUSTED/i.test(msg);
+          if (dailyQuota) { errs.push(`${model}: DAILY_QUOTA`); break; }
           if (attempt < 3 && /429|503|504|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
             await new Promise(r => setTimeout(r, (/429|RESOURCE_EXHAUSTED/i.test(msg) ? 8000 : 1500) * attempt));
             continue;
@@ -81,6 +83,9 @@ export class GeminiProvider implements Provider {
           break; // timeout, 404, or out of retries -> next model
         }
       }
+    }
+    if (errs.length && errs.every(e => /DAILY_QUOTA/.test(e))) {
+      throw new Error('Gemini daily request limit reached for this API key (free tier allows ~20 requests/day per model). Turn on billing for the key in Google AI Studio, or try again after the limit resets.');
     }
     throw new Error(errs.join(' | ') || 'Gemini returned no result');
   }
