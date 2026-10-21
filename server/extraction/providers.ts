@@ -8,7 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { RESPONSE_SCHEMA, SYSTEM_PROMPT } from './schema';
 import { rulesExtract } from './rules';
 
@@ -31,10 +31,14 @@ export interface Provider {
 
 // ------------------------------------------------------------------ gemini
 
+const THINK: Record<string, ThinkingLevel> = { minimal: ThinkingLevel.MINIMAL, low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
+
 export class GeminiProvider implements Provider {
   name = 'gemini' as const;
   private ai: GoogleGenAI;
   private models: string[];
+  /** Extraction needs little reasoning; low thinking is far faster. GEMINI_THINKING=low|minimal|medium|high|off */
+  private thinking: string = (process.env.GEMINI_THINKING ?? 'low').toLowerCase();
 
   constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest')) {
     this.ai = new GoogleGenAI({ apiKey });
@@ -58,15 +62,18 @@ export class GeminiProvider implements Provider {
               responseMimeType: 'application/json',
               responseSchema: RESPONSE_SCHEMA as any,
               temperature: 0,
-              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 45000) },
+              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 90000) },
+              ...(this.thinking !== 'off' && THINK[this.thinking] ? { thinkingConfig: { thinkingLevel: THINK[this.thinking] } } : {}),
             },
           });
           return { raw: JSON.parse(res.text ?? ''), model };
         } catch (e: any) {
           const msg = String(e?.message ?? e).replace(/\s+/g, ' ');
+          // Model doesn't accept the thinking setting: stop sending it and retry straight away.
+          if (this.thinking !== 'off' && /thinking/i.test(msg) && /INVALID_ARGUMENT|400|not supported/i.test(msg)) { this.thinking = 'off'; attempt--; continue; }
           if (/api key|permission|401|403|PERMISSION_DENIED|UNAUTHENTICATED/i.test(msg) && !/not found/i.test(msg)) throw e;
           // Overloaded / rate limited: wait and retry the same model.
-          if (attempt < 3 && /429|503|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
+          if (attempt < 3 && /429|503|504|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
             await new Promise(r => setTimeout(r, 1500 * attempt));
             continue;
           }
