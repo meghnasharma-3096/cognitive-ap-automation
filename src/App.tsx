@@ -303,7 +303,7 @@ const IntentCard = ({ intent, count, description, color, onClick }: any) => {
         </div>
         <span className="text-2xl font-bold text-white font-mono">{(count || 0).toLocaleString()}</span>
       </div>
-      <h4 className="text-lg font-bold text-white mb-1 group-hover:text-brand-accent transition-colors">{intent}s</h4>
+      <h4 className="text-lg font-bold text-white mb-1 group-hover:text-brand-accent transition-colors">{intent === 'Inquiry' ? 'Inquiries' : `${intent}s`}</h4>
       <p className="text-xs text-slate-400 leading-relaxed">{description}</p>
       
       <div className="mt-6 pt-6 border-t border-brand-border flex items-center justify-between">
@@ -428,7 +428,7 @@ const DocumentFeed = ({ docs, isLoading, activeTab, setActiveTab }: { docs: Docu
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              {tab === 'All' ? 'All Documents' : `${tab}s`}
+              {tab === 'All' ? 'All Documents' : tab === 'Inquiry' ? 'Inquiries' : `${tab}s`}
               {activeTab === tab && (
                 <motion.div 
                   layoutId="activeTab"
@@ -832,7 +832,7 @@ export default function App() {
                 />
                 <KPICard 
                   title="Avg Processing Time" 
-                  value={metrics.avgMs === null ? '–' : `${(metrics.avgMs / 1000).toFixed(1)}s`} 
+                  value={metrics.avgMs === null ? '–' : (metrics.avgMs < 1000 ? `${Math.round(metrics.avgMs)}ms` : `${(metrics.avgMs / 1000).toFixed(1)}s`)} 
                   change={metrics.avgMs === null ? 'No data' : 'Measured'} 
                   trend="down" 
                   icon={Clock}
