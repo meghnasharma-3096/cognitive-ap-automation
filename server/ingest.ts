@@ -200,13 +200,24 @@ export async function ingestDocument(store: JsonStore, raw: RawDocument, opts: I
     rawExt = r.raw; model = r.model;
   } catch (e: any) {
     const msg = String(e?.message ?? e);
-    if (opts.provider.name === 'gemini' && prep.input.text.trim().length >= 20) {
+    const replayMiss = opts.provider.name === 'fixture' && /No recorded LLM fixture/.test(msg);
+    if ((opts.provider.name === 'gemini' || replayMiss) && prep.input.text.trim().length >= 20) {
       // Loud fallback: never silent, never auto-posted.
-      warnings.push(`LLM call failed (${msg.slice(0, 200)}); used the offline rules parser instead`);
+      warnings.push(replayMiss
+        ? 'Demo mode: this is not one of the recorded sample documents, so the offline text parser was used instead of the AI reader'
+        : `LLM call failed (${msg.slice(0, 200)}); used the offline rules parser instead`);
       providerName = 'rules-fallback';
-      forcedReview = 'LLM unavailable: extracted with the offline fallback parser';
+      forcedReview = replayMiss
+        ? 'Demo mode (no AI key): read with the offline parser, please verify'
+        : 'LLM unavailable: extracted with the offline fallback parser';
       rawExt = (await new RulesProvider().extract(prep.input)).raw;
       model = 'rules';
+    } else if (opts.provider.name === 'fixture' && /No recorded LLM fixture/.test(msg)) {
+      const m = 'Demo mode: this file is not one of the recorded samples and has no readable text. Scans and images need the live AI reader (set GEMINI_API_KEY).';
+      return store.transact(t => persist(t, {
+        ...base, ext: null, confidence: 0, warnings, providerName: 'fixture', needsReview: true,
+        reviewReason: m, ms: Date.now() - t0, error: m,
+      }));
     } else if (opts.provider.name === 'rules' && msg === 'RULES_NO_TEXT') {
       const m = 'No LLM configured and this file has no text to parse offline. Set GEMINI_API_KEY to read scans and images.';
       return store.transact(t => persist(t, {

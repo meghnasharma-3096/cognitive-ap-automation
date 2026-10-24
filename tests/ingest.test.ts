@@ -171,6 +171,33 @@ describe('business rules at the door', () => {
     expect(r.error).toMatch(/daily request limit/);
   });
 
+  describe('demo mode (fixture provider, document not in the recorded set)', () => {
+    it('reads unrecorded pasted text with the offline parser and always sends it to review', async () => {
+      const r = await ingestDocument(store, {
+        filename: 'my-own-invoice.txt',
+        text: 'Invoice INV-7777 for PO-2024-100. 10 units @ 12.50 each. Total $125.00',
+      }, { provider: fixture, source: 'ui' });
+      expect(r.ok).toBe(true);
+      expect(r.provider).toBe('rules-fallback');
+      expect(r.status).toBe('Needs Review');
+      expect(r.warnings.join(' ')).toMatch(/Demo mode/);
+      expect(r.extraction?.invoice_number).toBe('INV-7777');
+    });
+
+    it('gives a plain explanation for an unrecorded image', async () => {
+      const png = fs.readFileSync(path.join(CORPUS, 'scanned_invoice.png')).toString('base64');
+      const r = await ingestDocument(store, { filename: 'someone-elses-scan.png', dataBase64: png }, { provider: fixture });
+      expect(r.ok).toBe(false);
+      expect(r.status).toBe('Needs Review');
+      expect(r.error).toMatch(/Demo mode.*GEMINI_API_KEY/);
+    });
+
+    it('recorded samples are still read by the recorded answers', async () => {
+      const r = await ingestDocument(store, raw('paragraph_invoice.txt'), { provider: fixture });
+      expect(r.provider).toBe('fixture');
+    });
+  });
+
   it('unsupported file type is rejected cleanly', async () => {
     const r = await ingestDocument(store, { filename: 'x.zip', dataBase64: Buffer.from('PK').toString('base64') }, { provider: fixture });
     expect(r.ok).toBe(false);

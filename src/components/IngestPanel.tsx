@@ -64,7 +64,7 @@ export const IngestPanel: React.FC<{ onDone: () => void | Promise<void> }> = ({ 
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <Sparkles size={14} className={llm?.live ? 'text-brand-success' : 'text-amber-400'} />
           <span data-testid="llm-status">
-            {llm ? (llm.live ? 'Reading with Gemini' : llm.provider === 'fixture' ? 'Test mode: replaying recorded model answers from tests/corpus' : `Offline reader (${llm.reason}). Scans and images need a Gemini key.`) : 'Reader status unavailable'}
+            {llm ? (llm.live ? 'Reading with Gemini' : llm.provider === 'fixture' ? 'Demo mode: the 11 sample documents use recorded AI answers; any other text is read by the offline parser and sent for review. Scans and images need a Gemini key.' : `Offline reader (${llm.reason}). Scans and images need a Gemini key.`) : 'Reader status unavailable'}
           </span>
         </div>
       </div>

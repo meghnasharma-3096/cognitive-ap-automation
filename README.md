@@ -51,7 +51,7 @@ Duplicate invoice (same invoice number alone) · PO missing · receipt missing �
 The app needs a Node host (GitHub Pages cannot run the API). A `Dockerfile` and `render.yaml` are included:
 
 1. Push the branch to GitHub. On https://render.com choose **New > Blueprint** and pick this repo.
-2. It builds and starts in **replay mode** (`LLM_PROVIDER=fixture`): the 11 sample documents are read from recorded answers, so no key is needed.
+2. It builds and starts in **demo (replay) mode** (`LLM_PROVIDER=fixture`): the 11 sample documents are read from recorded answers, so no key is needed. Any other pasted text or text file is read by the offline parser and always goes to the Needs Review queue; scans and images need a Gemini key.
 3. To read arbitrary documents live, delete `LLM_PROVIDER` in the service settings and add `GEMINI_API_KEY`.
 
 Locally: `npm run build && NODE_ENV=production npm start`.
