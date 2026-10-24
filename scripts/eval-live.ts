@@ -19,7 +19,10 @@ const key = process.env.GEMINI_API_KEY;
 if (!key) { console.error('GEMINI_API_KEY is not set (put it in .env)'); process.exit(2); }
 
 const record = process.argv.includes('--record');
-let provider: any = new GeminiProvider(key);
+const gemini = new GeminiProvider(key);
+const started = Date.now();
+gemini.onProgress = m => console.log(`[${String(Math.round((Date.now() - started) / 1000)).padStart(3)}s] ${m}`);
+let provider: any = gemini;
 if (record) provider = new RecordingProvider(provider, corpus);
 
 const only = process.argv.slice(2).filter(a => !a.startsWith('--'));   // e.g. npm run eval:live -- paragraph scanned

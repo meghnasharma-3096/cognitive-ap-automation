@@ -39,6 +39,8 @@ export class GeminiProvider implements Provider {
   private models: string[];
   /** Extraction needs little reasoning; low thinking is far faster. GEMINI_THINKING=low|minimal|medium|high|off */
   private thinking: string = (process.env.GEMINI_THINKING ?? 'low').toLowerCase();
+  /** Optional progress messages (attempt, waiting heartbeat, result). Set GEMINI_VERBOSE=1 to print them in the server too. */
+  onProgress: ((msg: string) => void) | null = process.env.GEMINI_VERBOSE ? (m => console.log(`[gemini] ${m}`)) : null;
 
   constructor(apiKey: string, models = (process.env.GEMINI_MODEL ?? 'gemini-3.8-flash,gemini-flash-latest,gemini-3.1-pro-preview')) {
     this.ai = new GoogleGenAI({ apiKey });
@@ -51,8 +53,14 @@ export class GeminiProvider implements Provider {
       ...input.attachments.map(a => ({ inlineData: { mimeType: a.mimeType, data: a.dataBase64 } })),
     ];
     const errs: string[] = [];
+    const say = (m: string) => this.onProgress?.(m);
+    const kb = Math.round(input.attachments.reduce((n, a) => n + a.dataBase64.length * 0.75, 0) / 1024);
+    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS ?? 90000);
     for (const model of this.models) {
       for (let attempt = 1; attempt <= 3; attempt++) {
+        const t0 = Date.now();
+        say(`${input.filename}: asking ${model} (try ${attempt}/3, ${kb} KB attached, gives up after ${Math.round(timeoutMs / 1000)}s)`);
+        const beat = this.onProgress ? setInterval(() => say(`   ...still waiting on ${model} (${Math.round((Date.now() - t0) / 1000)}s)`), 10000) : null;
         try {
           const res = await this.ai.models.generateContent({
             model,
@@ -62,13 +70,15 @@ export class GeminiProvider implements Provider {
               responseMimeType: 'application/json',
               responseSchema: RESPONSE_SCHEMA as any,
               temperature: 0,
-              httpOptions: { timeout: Number(process.env.GEMINI_TIMEOUT_MS ?? 90000) },
+              httpOptions: { timeout: timeoutMs },
               ...(this.thinking !== 'off' && THINK[this.thinking] ? { thinkingConfig: { thinkingLevel: THINK[this.thinking] } } : {}),
             },
           });
+          say(`   answer received from ${model} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
           return { raw: JSON.parse(res.text ?? ''), model };
         } catch (e: any) {
           const msg = String(e?.message ?? e).replace(/\s+/g, ' ');
+          say(`   ${model} failed after ${((Date.now() - t0) / 1000).toFixed(1)}s: ${msg.slice(0, 140)}`);
           // Model doesn't accept the thinking setting: stop sending it and retry straight away.
           if (this.thinking !== 'off' && /thinking/i.test(msg) && /INVALID_ARGUMENT|400|not supported/i.test(msg)) { this.thinking = 'off'; attempt--; continue; }
           if (/api key|permission|401|403|PERMISSION_DENIED|UNAUTHENTICATED/i.test(msg) && !/not found/i.test(msg)) throw e;
@@ -76,11 +86,16 @@ export class GeminiProvider implements Provider {
           const dailyQuota = /PerDay|per day|free_tier_requests/i.test(msg) && /429|RESOURCE_EXHAUSTED/i.test(msg);
           if (dailyQuota) { errs.push(`${model}: DAILY_QUOTA`); break; }
           if (attempt < 3 && /429|503|504|500|overloaded|unavailable|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|INTERNAL|JSON/i.test(msg) && !/404|not found|no longer available/i.test(msg)) {
-            await new Promise(r => setTimeout(r, (/429|RESOURCE_EXHAUSTED/i.test(msg) ? 8000 : 1500) * attempt));
+            const wait = (/429|RESOURCE_EXHAUSTED/i.test(msg) ? 8000 : 1500) * attempt;
+            say(`   retrying ${model} in ${wait / 1000}s`);
+            await new Promise(r => setTimeout(r, wait));
             continue;
           }
           errs.push(`${model}: ${msg.slice(0, 180)}`);
+          say(`   giving up on ${model}, trying the next model`);
           break; // timeout, 404, or out of retries -> next model
+        } finally {
+          if (beat) clearInterval(beat);
         }
       }
     }
